@@ -161,4 +161,6 @@ python arsodata/server.py              # http://127.0.0.1:9161
 streamlit run arso_nadzorna_plosca/app.py
 ```
 
+Strežnik privzeto bere podatke v živo (ARSO XML, zajem v oblaku, Open-Meteo CAMS), zato podatkovni paket ni potreben. Samo način `live=0` (offline/arhiv) potrebuje datoteke paketa; če jih ni, strežnik ob zagonu izpiše cela navodila, zahteva pa vrne 503 `data_files_missing`. Paket je na voljo na https://github.com/vidacex/ARSOhack (mape `01_meritve`, `02_modeli`, `03_vreme_inverzija` v koren projekta, `04_prostor` samo za `baza.py`).
+
 Plošča, `baza.py` in strežnik morajo gledati isto bazo. Pred ponovnim zagonom `baza.py` ustavite strežnik; na Windows datoteke ne bo mogoče prepisati.

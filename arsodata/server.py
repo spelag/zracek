@@ -12,6 +12,17 @@ Run
     python server.py                                   # http://127.0.0.1:9161
     # production: gunicorn -w 1 -b 0.0.0.0:5000 server:app
 
+Data files (optional)
+---------------------
+Live mode is the default and needs only internet access: no local data files
+are required.  Offline mode (``live=0`` or historic ``at`` values) uses the
+ARSOhack data package.  If that package is missing, startup prints full
+installation instructions and offline requests return 503
+``data_files_missing``.  Get it from https://github.com/vidacex/ARSOhack and
+place ``01_meritve/``, ``02_modeli/`` and ``03_vreme_inverzija/`` at the
+project root (next to ``arsodata/``); ``04_prostor/`` is only needed by the
+dashboard's ``baza.py``.
+
 Dashboard database
 ------------------
 Every valid request to /air-quality is also aggregated into the ARSO dashboard
@@ -54,8 +65,10 @@ include_current  1 (default) -> element 0 is the latest measurement.
                  0          -> element 0 is the first forecast hour.
                  So include_current=1, hours=12  ==  "now + next 11 h";
                     include_current=0, hours=12  ==  "next 12 h".
-live             1 -> also fetch newest ARSO + Open-Meteo CAMS (needs internet).
-                 0 (default) -> files only.
+live             1 (default) -> newest ARSO + Open-Meteo CAMS (needs internet);
+                   also used when only 'at' is supplied.
+                 0 -> local data files only (offline/archive). Requires the
+                   ARSOhack data package; returns 503 if it is missing.
                  If 'at' is omitted (i.e. "now"), 'live=1' is required.
 at               ISO timestamp, e.g. 2026-01-20T18:00 (naive = UTC).
                  Omitted -> "now" (implies live=1).
@@ -66,11 +79,12 @@ Errors
 ------
 400  missing / invalid lat, lon, hours, at (body: {"error", "code"})
 404  no station with a recent PM2.5 measurement near (lat, lon)
+503  live=0 requested but the optional ARSOhack data package is missing
 500  unexpected failure
 
 Notes
 -----
-- air_12 caches live downloads for 10 min, so repeated live=1 calls are cheap.
+- air_12 caches live downloads for 10 min, so repeated live calls are cheap.
 - Values are 1 (good) … 5 (very bad); null means no data for that hour.
 - The Flask dev server is single-threaded. For production, run with a single
   worker or add a lock around air_12._live_cache.
@@ -94,6 +108,7 @@ sys.path.insert(0, str(BASE_DIR))
 try:
     import pandas as pd
     from air_12 import air_quality_forecast
+    from paket import manjkajoce_datoteke, navodila_za_podatke
 except ImportError as _e:  # pragma: no cover
     sys.stderr.write(
         f"ERROR: could not import air_12 / pandas / flask: {_e}\n"
@@ -109,6 +124,18 @@ except Exception as _e:  # pragma: no cover - recording must never break the API
     sys.stderr.write(f"WARNING: dashboard bridge unavailable ({_e}); requests will not be stored.\n")
 
 app = Flask(__name__)
+
+
+def _opozori_o_podatkih() -> None:
+    """Tell the operator on startup how to install the optional data package."""
+    try:
+        if manjkajoce_datoteke():
+            sys.stderr.write("\n" + navodila_za_podatke() + "\n\n")
+    except Exception:  # noqa: BLE001 - a startup notice must never prevent serving
+        pass
+
+
+_opozori_o_podatkih()
 
 
 # --------------------------------------------------------------------------- helpers
@@ -170,7 +197,7 @@ def air_quality():
 
     # ---- time / live ----------------------------------------------------
     at = request.args.get("at")            # None -> "now"
-    live = _as_bool(request.args.get("live"), default=False)
+    live = _as_bool(request.args.get("live"), default=True)   # live data is the default
     if at is None:
         if "live" in request.args and not live:
             return jsonify(error="If 'at' is omitted (i.e. \"now\"), 'live=1' is required.",
@@ -206,6 +233,14 @@ def air_quality():
     except ValueError as e:
         # air_12 raises ValueError when no station had a recent PM2.5
         return jsonify(error=str(e), code="no_data_nearby"), 404
+    except FileNotFoundError as e:
+        # live=False was requested but the optional ARSOhack data package is absent
+        app.logger.warning("offline forecast requested but data package is incomplete: %s", e)
+        return jsonify(
+            error="Offline mode (live=0) needs the ARSOhack data package, which is not "
+                  "installed. Live mode is the default and works without it. "
+                  "See the server startup log or https://github.com/vidacex/ARSOhack.",
+            code="data_files_missing"), 503
     except Exception as e:  # noqa: BLE001
         app.logger.exception("air_quality_forecast failed")
         return jsonify(error=f"internal error: {e}", code="internal"), 500

@@ -11,6 +11,47 @@ import pandas as pd
 
 P = Path(__file__).resolve().parent.parent  # koren paketa
 
+# Zunanji podatkovni paket (potreben samo za offline/arhivski način).
+DATA_URL = "https://github.com/vidacex/ARSOhack"
+OFFLINE_DATOTEKE = (
+    "01_meritve/arso_lj_pm_urno_2016_2026.csv.gz",
+    "03_vreme_inverzija/inverzija_urno_2016_2026.csv",
+    "02_modeli/cams_openmeteo_urno_2016_2026.csv.gz",
+)
+
+
+def manjkajoce_datoteke(datoteke=OFFLINE_DATOTEKE):
+    """Datoteke paketa, ki jih za offline način ni pod korenom projekta."""
+    return [f for f in datoteke if not (P / f).exists()]
+
+
+def navodila_za_podatke():
+    """Celotna navodila za namestitev podatkovnega paketa (za izpis ob zagonu)."""
+    missing = manjkajoce_datoteke()
+    vrstice = [
+        "=" * 78,
+        "ARSOhack data package not found - OFFLINE mode is unavailable.",
+        "Live mode is the default and needs no local files.",
+        "",
+        f"Data root checked: {P}",
+    ]
+    vrstice += [f"  missing: {m}" for m in missing]
+    vrstice += [
+        "",
+        "To enable offline mode (live=0 or historic 'at' queries):",
+        f"  git clone {DATA_URL}",
+        "  cd ARSOhack",
+        f"  cp -r 01_meritve 02_modeli 03_vreme_inverzija 04_prostor {P}/",
+        "  # (or symlink the same directories into that location)",
+        "",
+        "The API needs 01_meritve, 02_modeli and 03_vreme_inverzija.",
+        "04_prostor is only needed by arso_nadzorna_plosca/baza.py.",
+        "Python deps for the API: pip install -r arsodata/requirements.txt",
+        "Optional, for the package's example notebooks: pip install -r requirements.txt",
+        "=" * 78,
+    ]
+    return "\n".join(vrstice)
+
 # Postaje ARSO (meritev)
 POSTAJE = {
     "E403": dict(ime="LJ Bežigrad", lat=46.0655449, lon=14.5127203, tip="mestno ozadje"),

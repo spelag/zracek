@@ -10,8 +10,12 @@ module (the notebook's functions are not importable). Put this file next to pake
 Row 0 is the latest MEASUREMENT of the nearest ARSO station; rows 1..12 are ESTIMATES: the typical
 winter daily profile anchored on that measurement and weighted half-and-half with the CAMS trend.
 
-Live mode (t=None or live=True) uses the same data files plus the newest data from
-v_zivo/zrak_v_zivo.py: ARSO last hour, cloud-capture history and the Open-Meteo CAMS forecast.
+Live mode (t=None or live=True) uses the newest data from v_zivo/zrak_v_zivo.py: ARSO last
+hour, cloud-capture history and the Open-Meteo CAMS forecast.  The historical data files are
+optional in live mode: when they are absent, measurements, CAMS and the typical daily profile
+are all derived from the live sources (a pure "hold the measurement, follow the CAMS trend"
+forecast is used if even those are unavailable).  Only offline mode (live=False) needs the
+files; see https://github.com/vidacex/ARSOhack.
 """
 from __future__ import annotations
 
@@ -37,6 +41,7 @@ LIVE_HISTORY_DAYS = 365    # cloud capture only exists since 13 Nov 2026; the wh
                            # this just filters it, so a long window costs nothing and leaves no gap after the files end
 _live_cache: dict = {}
 _warned_no_coords = False
+_warned_no_files = False
 
 
 def _haversine_km(lat1, lon1, lat2, lon2):
@@ -88,6 +93,51 @@ def _as_utc(s: pd.Series) -> pd.Series:
     return s.dt.tz_localize("UTC") if s.dt.tz is None else s.dt.tz_convert("UTC")
 
 
+def _empty_arso() -> pd.DataFrame:
+    return pd.DataFrame({
+        "station_code": pd.Series(dtype="object"),
+        "time_utc": pd.Series(dtype="datetime64[ns, UTC]"),
+        "pm25": pd.Series(dtype="float64"),
+        "pm10": pd.Series(dtype="float64"),
+    })
+
+
+def _empty_inv() -> pd.DataFrame:
+    return pd.DataFrame({
+        "time_utc": pd.Series(dtype="datetime64[ns, UTC]"),
+        "inv_pasja_ravan": pd.Series(dtype="float64"),
+    })
+
+
+def _empty_cams() -> dict:
+    idx = pd.DatetimeIndex([], tz="UTC", name="time_utc")
+    return {"pm25": pd.Series(dtype="float64", index=idx),
+            "pm10": pd.Series(dtype="float64", index=idx)}
+
+
+def _profiles(arso: pd.DataFrame, inv: pd.DataFrame) -> dict:
+    """Typical winter profile by (station, inversion yes/no, weekend, UTC hour).
+
+    Inversion is optional: when ``inv`` is empty (no data files, live-only mode),
+    only the by-station/weekend/hour profile is built and is used for every hour.
+    """
+    w = zima(arso[arso.time_utc >= "2023-11-01"]).copy()
+    has_inv = inv is not None and not inv.empty
+    if has_inv:
+        w = w.merge(inv, on="time_utc", how="left")
+        w = w.dropna(subset=["inv_pasja_ravan"])
+        w["inv"] = w["inv_pasja_ravan"].astype(float).astype(bool)
+    w["hour"] = w.time_utc.dt.hour
+    w["weekend"] = w.time_utc.dt.dayofweek >= 5
+    profiles = {}
+    for p in _POLLUTANTS:
+        g = w.dropna(subset=[p])
+        by_inv = (g.groupby(["station_code", "inv", "weekend", "hour"])[p].mean()
+                  if "inv" in g.columns else pd.Series(dtype="float64"))
+        profiles[p] = (by_inv, g.groupby(["station_code", "weekend", "hour"])[p].mean())
+    return profiles
+
+
 @lru_cache(maxsize=1)
 def _load():
     """Load the data files once: ARSO measurements, inversion flag, CAMS series, typical daily profiles."""
@@ -104,18 +154,7 @@ def _load():
     cams_s = {"pm25": cams["cams_pm25"],
               "pm10": cams["cams_pm10"] if "cams_pm10" in cams.columns else cams["cams_pm25"]}
 
-    # typical winter profile by (station, inversion yes/no, weekend, UTC hour), as in the notebook
-    w = zima(arso[arso.time_utc >= "2023-11-01"]).merge(inv, on="time_utc", how="left")
-    w = w.dropna(subset=["inv_pasja_ravan"])
-    w["inv"] = w["inv_pasja_ravan"].astype(float).astype(bool)
-    w["hour"] = w.time_utc.dt.hour
-    w["weekend"] = w.time_utc.dt.dayofweek >= 5
-    profiles = {}
-    for p in _POLLUTANTS:
-        g = w.dropna(subset=[p])
-        profiles[p] = (g.groupby(["station_code", "inv", "weekend", "hour"])[p].mean(),
-                       g.groupby(["station_code", "weekend", "hour"])[p].mean())   # used if inversion unknown
-    return arso, inv, cams_s, profiles
+    return arso, inv, cams_s, _profiles(arso, inv)
 
 
 def _zv():
@@ -131,25 +170,38 @@ def _zv():
 def _load_live():
     """Same tuple as _load(), but with the newest measurements and CAMS forecast added.
 
-    The typical profiles stay computed from the historical files (they are climatology, not news).
-    The inversion flag has no live source in v_zivo, so it stays as in the files (-> None for new hours,
-    and the profile without the inversion split is used).
+    The historical data files are OPTIONAL.  If they are missing, the complete
+    dataset is built from live sources only (cloud-capture history, ARSO last
+    hour, Open-Meteo CAMS), and the typical profiles are derived from the live
+    history.  If even those are unavailable the forecast still works as
+    "measurement held constant, scaled by the CAMS trend".
     """
     now = pd.Timestamp.now(tz="UTC")
     if _live_cache and now - _live_cache["at"] < pd.Timedelta(minutes=LIVE_TTL_MIN):
         return _live_cache["data"]
-    arso, inv, cams_s, profiles = _load()
+    try:
+        arso, inv, cams_s, profiles = _load()
+        have_files = True
+    except FileNotFoundError as e:
+        global _warned_no_files
+        if not _warned_no_files:
+            warnings.warn(f"ARSOhack data package not found ({e}); using live sources only")
+            _warned_no_files = True
+        arso, inv = _empty_arso(), _empty_inv()
+        cams_s, profiles = _empty_cams(), {}
+        have_files = False
     zv = _zv()
 
-    # measurements: files, then cloud-capture history (since 13 Nov 2026), then ARSO last hour (newest wins)
+    # measurements: files (if present), then cloud-capture history (since 13 Nov 2026),
+    # then ARSO last hour (newest wins)
     cols = ["station_code", "time_utc", "pm25", "pm10"]
-    parts = [arso[cols]]
+    parts = [arso[cols]] if not arso.empty else []
     for name, fn in (("cloud history", lambda: zv.arso_zgodovina(LIVE_HISTORY_DAYS)), ("ARSO last hour", zv.arso_zadnja_ura)):
         try:
             parts.append(fn()[cols])
         except Exception as e:  # noqa: BLE001
             warnings.warn(f"live source '{name}' failed: {e!r}")
-    live_arso = pd.concat(parts, ignore_index=True)
+    live_arso = pd.concat(parts, ignore_index=True) if parts else _empty_arso()
     live_arso["time_utc"] = _as_utc(live_arso["time_utc"])
     for c in ("pm25", "pm10"):
         live_arso[c] = pd.to_numeric(live_arso[c], errors="coerce")
@@ -165,6 +217,10 @@ def _load_live():
                   for p in _POLLUTANTS}
     except Exception as e:  # noqa: BLE001
         warnings.warn(f"live source 'Open-Meteo CAMS forecast' failed: {e!r}; CAMS trend not available for new hours")
+
+    if not have_files:
+        # No climatology files: derive the typical winter profile from the live history.
+        profiles = _profiles(live_arso, inv)
 
     _live_cache.update(at=now, data=(live_arso, inv, cams_s, profiles))
     return _live_cache["data"]
@@ -240,8 +296,11 @@ def air_quality_forecast(lat: float, lon: float, t=None, max_lag_h: int = 3, hor
             break
     if m is None:
         tried = ", ".join(c for c, _ in stations) or "none (no station within max_station_km)"
+        newest = arso.time_utc.max() if not arso.empty else pd.NaT
+        newest_txt = (f"{newest:%Y-%m-%d %H:%M} UTC" if pd.notna(newest)
+                      else "none (live sources unavailable)")
         raise ValueError(f"No PM2.5 measurement at station(s) {tried} in the {max_lag_h} h before "
-                         f"{t:%Y-%m-%d %H:%M} UTC (newest ARSO data: {arso.time_utc.max():%Y-%m-%d %H:%M} UTC"
+                         f"{t:%Y-%m-%d %H:%M} UTC (newest ARSO data: {newest_txt}"
                          f"{'' if live else '; try live=True or t=None'})"
                          + (f"; not tried, farther than {fallback_max_km:g} km: {', '.join(too_far)}." if too_far else "."))
     now = {"pm25": float(m.pm25), "pm10": float(m.pm10) if pd.notna(m.pm10) else np.nan}
@@ -260,7 +319,10 @@ def air_quality_forecast(lat: float, lon: float, t=None, max_lag_h: int = 3, hor
             continue
         ref = _typical(profiles[p], code, inv_flag, [m.time_utc])[0]
         factor = float(np.clip(now[p] / ref, 0.3, 3.0)) if ref > 0 else 1.0      # anchor, but not too much
-        typ = _typical(profiles[p], code, inv_flag, grid) * factor
+        typ = _typical(profiles[p], code, inv_flag, grid)
+        # Missing climatology (no files / short live history): hold the measurement.
+        typ = np.where(np.isfinite(typ), typ, float(now[p]))
+        typ = typ * factor
         c = cams_s[p]
         base = c.get(t0, np.nan)
         ratio = np.array([c.get(th, np.nan) / base if base > 0 else np.nan for th in grid])
