@@ -1,0 +1,87 @@
+(footprint "TestPads_1x05_P1.27mm"
+  (version 20241229)
+  (generator "kicad-mcp")
+  (generator_version "9.0")
+  (layer "F.Cu")
+  (descr "1x05 SMD test pads, 1.27 mm pitch, 1.0 mm round, no paste layer. For pogo-pin SWD/UART probing.")
+  (tags "testpoint pogo SWD pad")
+
+  (property "Reference" "REF**" (at 0 -1.27 0)
+    (layer "F.SilkS")
+    (uuid "46051907-8227-4e47-9e27-b84dda16cf5e")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+  (property "Value" "TestPads_1x05_P1.27mm" (at 0 1.27 0)
+    (layer "F.Fab")
+    (uuid "980401a2-7b41-4b34-912c-feba4e2af50c")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+  (property "Datasheet" "" (at 0 0 0)
+    (layer "F.Fab")
+    (uuid "abc08f57-8fc7-480b-919d-3cddd1a8e8ee")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+
+  (fp_rect
+    (start -3.4 -1.1)
+    (end 3.4 1.1)
+    (stroke (width 0.05) (type default))
+    (fill none)
+    (layer "F.CrtYd")
+    (uuid "7ec9bf7e-da9f-4c4b-8710-895d0b661846")
+  )
+
+  (fp_rect
+    (start -3.1 -0.75)
+    (end 3.1 0.75)
+    (stroke (width 0.12) (type default))
+    (fill none)
+    (layer "F.SilkS")
+    (uuid "22bfa488-0fa0-4604-b724-9f540b639789")
+  )
+
+  (fp_rect
+    (start -2.54 -0.5)
+    (end 2.54 0.5)
+    (stroke (width 0.1) (type default))
+    (fill none)
+    (layer "F.Fab")
+    (uuid "9266c81e-fa2b-4096-a811-b517f045882f")
+  )
+
+  (pad "1" smd circle
+    (at -2.54 0)
+    (size 1 1)
+    (layers "F.Cu" "F.Mask")
+    (uuid "03ee47f3-0262-406e-8fea-5deabaf944a7")
+  )
+
+  (pad "2" smd circle
+    (at -1.27 0)
+    (size 1 1)
+    (layers "F.Cu" "F.Mask")
+    (uuid "564e9733-7e98-4f7c-8810-50dfbc9c4ff4")
+  )
+
+  (pad "3" smd circle
+    (at 0 0)
+    (size 1 1)
+    (layers "F.Cu" "F.Mask")
+    (uuid "984813aa-2e61-4023-b5df-00665fbe01d4")
+  )
+
+  (pad "4" smd circle
+    (at 1.27 0)
+    (size 1 1)
+    (layers "F.Cu" "F.Mask")
+    (uuid "bdafa456-41ef-44e4-bed2-add8a5822add")
+  )
+
+  (pad "5" smd circle
+    (at 2.54 0)
+    (size 1 1)
+    (layers "F.Cu" "F.Mask")
+    (uuid "b6101766-1821-4e68-b624-d897e357d641")
+  )
+
+)

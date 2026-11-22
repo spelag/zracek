@@ -1,0 +1,215 @@
+(kicad_symbol_lib
+  (version 20241209)
+  (generator "kicad-mcp")
+  (generator_version "9.0")
+  (symbol "MFF2_eSIM"
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "U"
+      (at 2.54 0 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+    )
+    (property "Value" "MFF2_eSIM"
+      (at 0 -2.54 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+    )
+    (property "Footprint" "led_watch:MFF2_eSIM"
+      (at 0 -5.08 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+      (hide yes)
+    )
+    (property "Datasheet" "~"
+      (at 0 -7.62 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+      (hide yes)
+    )
+    (property "Description" "MFF2 / QFN-8 industrial eSIM (1NCE IoT SIM Chip Industrial), 5 x 6 mm, 1.27 mm pitch"
+      (at 0 -10.16 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+      (hide yes)
+    )
+    (property "ki_keywords" "eSIM MFF2 1NCE SIM"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+      (hide yes)
+    )
+    (symbol "MFF2_eSIM_0_1"
+      (rectangle
+        (start -5.08 -5.08)
+        (end 5.08 5.08)
+        (stroke (width 0.254) (type default))
+        (fill (type background))
+      )
+    )
+    (symbol "MFF2_eSIM_1_1"
+      (pin power_in line
+        (at -7.62 2.54 0)
+        (length 2.54)
+        (name "VCC"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "8"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+      (pin input line
+        (at -7.62 0 0)
+        (length 2.54)
+        (name "RESET"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "7"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+      (pin input line
+        (at -7.62 -2.54 0)
+        (length 2.54)
+        (name "CLK"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "6"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+      (pin power_in line
+        (at 7.62 2.54 180)
+        (length 2.54)
+        (name "GND"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "1"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+      (pin bidirectional line
+        (at 7.62 0 180)
+        (length 2.54)
+        (name "I/O"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "3"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+      (pin input line
+        (at 7.62 -2.54 180)
+        (length 2.54)
+        (name "VPP"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "2"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+      (pin no_connect line
+        (at -2.54 -7.62 90)
+        (length 2.54)
+        (name "NC"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "4"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+      (pin no_connect line
+        (at 0 -7.62 90)
+        (length 2.54)
+        (name "NC"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "5"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+    )
+  )
+  (symbol "UFL_Connector"
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "J"
+      (at 2.54 0 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+    )
+    (property "Value" "UFL_Connector"
+      (at 0 -2.54 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+    )
+    (property "Footprint" "Connector_Coaxial:U.FL_Hirose_U.FL-R-SMT-1_Vertical"
+      (at 0 -5.08 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+      (hide yes)
+    )
+    (property "Datasheet" "~"
+      (at 0 -7.62 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+      (hide yes)
+    )
+    (property "Description" "U.FL / IPEX MHF1 coaxial antenna connector"
+      (at 0 -10.16 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+      (hide yes)
+    )
+    (property "ki_keywords" "uFL IPEX MHF antenna coaxial"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+      (hide yes)
+    )
+    (symbol "UFL_Connector_0_1"
+      (rectangle
+        (start -2.54 -2.54)
+        (end 2.54 2.54)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+    )
+    (symbol "UFL_Connector_1_1"
+      (pin passive line
+        (at -5.08 1.27 0)
+        (length 2.54)
+        (name "SIG"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "1"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+      (pin passive line
+        (at -5.08 -1.27 0)
+        (length 2.54)
+        (name "GND"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "2"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+    )
+  )
+)

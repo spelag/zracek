@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1412">
+  <title>Air Ring companion</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <h1>Air Ring</h1>
+        <p>Companion</p>
+      </div>
+    </div>
+    <div class="conn">
+      <span class="dot" id="connDot" aria-hidden="true"></span>
+      <span id="connText">Not connected</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card" id="connectCard">
+      <h2>Connect your ring</h2>
+      <p class="muted">The ring only talks over Bluetooth while it is in setup mode.</p>
+      <ol class="steps">
+        <li>Hold the button while powering the ring on, <em>or</em> hold the button for about 2 seconds while a forecast is showing.</li>
+        <li>Keep the ring close to your phone.</li>
+        <li>Tap Connect and choose the ring in Chrome's device picker.</li>
+      </ol>
+      <div class="buttonRow">
+        <button class="primary" id="connectBtn" type="button">Connect to ring</button>
+        <button class="ghost" id="disconnectBtn" type="button" hidden>Disconnect</button>
+      </div>
+      <p class="hint" id="connectHint"></p>
+      <p class="hint warn" id="secureHint" hidden></p>
+    </section>
+
+    <nav class="tabs" id="tabs" hidden aria-label="Sections">
+      <button class="tab active" data-tab="public" type="button">Ring settings</button>
+      <button class="tab" data-tab="dev" type="button">Developer</button>
+    </nav>
+
+    <section id="publicTab" hidden>
+      <div class="card">
+        <div class="deviceRow">
+          <div>
+            <div class="eyebrow">Connected to</div>
+            <div id="deviceName" class="deviceName">—</div>
+          </div>
+          <div class="fw" id="deviceFw"></div>
+        </div>
+        <hr>
+
+        <div class="setting">
+          <div class="settingHead">
+            <label for="anonRange">GPS anonymization distance</label>
+            <output id="anonOut" for="anonRange">—</output>
+          </div>
+          <input type="range" id="anonRange" min="0" max="1000" step="10" value="250">
+          <div class="inline">
+            <input type="number" id="anonNum" min="0" max="1000" step="10" value="250" inputmode="numeric" aria-label="Anonymization distance in metres">
+            <span class="unit">metres</span>
+          </div>
+          <p class="help">The ring snaps its GPS position to a grid of this size before asking the air-quality service. Bigger means more privacy.</p>
+        </div>
+
+        <div class="setting">
+          <div class="settingHead">
+            <label for="brightRange">LED brightness</label>
+            <output id="brightOut" for="brightRange">—</output>
+          </div>
+          <input type="range" id="brightRange" min="0" max="255" step="1" value="160">
+          <div class="preview" id="brightPreview" aria-hidden="true"></div>
+          <p class="help" id="brightHelp">The ring flickers a little at full brightness on cheap strips. Your developer may set a lower cap.</p>
+        </div>
+
+        <div class="buttonRow">
+          <button class="primary" id="applyPublicBtn" type="button">Apply to ring</button>
+          <button class="ghost" id="exitPublicBtn" type="button">Exit setup</button>
+        </div>
+        <p class="status" id="publicStatus" role="status"></p>
+        <p class="muted small">Settings are saved in the ring's flash and apply immediately.</p>
+      </div>
+    </section>
+
+    <section id="devTab" hidden>
+      <div class="card" id="devLock">
+        <h2>Developer access</h2>
+        <p class="muted">Every device setting is behind the developer PIN. The public settings remain available in the other tab.</p>
+        <div class="inline">
+          <input type="password" id="pinInput" inputmode="numeric" autocomplete="off" placeholder="Developer PIN" aria-label="Developer PIN">
+          <button class="primary" id="unlockBtn" type="button">Unlock</button>
+        </div>
+        <p class="status" id="authStatus" role="status"></p>
+      </div>
+
+      <div id="devPanel" hidden>
+        <div class="card tight">
+          <div class="devToolbar">
+            <button class="ghost" id="reloadDevBtn" type="button">Reload</button>
+            <button class="primary" id="applyDevBtn" type="button">Apply changes</button>
+          </div>
+          <div class="devToolbar">
+            <button class="ghost" id="exitSetupBtn" type="button">Exit setup</button>
+            <button class="danger" id="factoryBtn" type="button">Factory reset</button>
+          </div>
+          <p class="status" id="devStatus" role="status"></p>
+        </div>
+        <form id="devForm" autocomplete="off"></form>
+      </div>
+    </section>
+
+    <section class="card" id="logCard" hidden>
+      <details>
+        <summary>Protocol log</summary>
+        <div class="logTools">
+          <button class="ghost smallBtn" id="clearLogBtn" type="button">Clear</button>
+        </div>
+        <pre id="log" aria-live="off"></pre>
+      </details>
+    </section>
+  </main>
+
+  <footer class="foot">Air-quality ring · Bluetooth setup</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

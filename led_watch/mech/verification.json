@@ -1,0 +1,119 @@
+{
+  "frame": "board centre origin, PCB back face Z=0, +Y = button side",
+  "parts_mm": {
+    "case_top": [
+      40.0,
+      48.0,
+      6.0
+    ],
+    "case_bottom": [
+      40.0,
+      40.0,
+      9.1
+    ],
+    "button": [
+      7.0,
+      7.0,
+      1.065
+    ],
+    "light_ring": [
+      32.7,
+      32.7,
+      1.48
+    ],
+    "battery": [
+      35.0,
+      35.0,
+      5.5
+    ],
+    "foam_pad": [
+      34.4,
+      33.244,
+      0.5
+    ],
+    "antenna_lte": [
+      6.154,
+      24.554,
+      0.18
+    ],
+    "antenna_gnss": [
+      6.154,
+      24.554,
+      0.18
+    ],
+    "keepout_lte": [
+      7.26,
+      26.462,
+      2.15
+    ],
+    "keepout_gnss": [
+      7.26,
+      26.462,
+      2.15
+    ]
+  },
+  "interference_mm3": {
+    "case_top_vs_pcb": 0.0,
+    "case_bottom_vs_pcb": 0.0,
+    "case_top_vs_battery": 0.0,
+    "case_bottom_vs_battery": 0.0,
+    "pcb_vs_battery": 0.0,
+    "pcb_vs_foam": 0.0,
+    "battery_vs_foam": 0.0,
+    "pcb_vs_keepout_lte": 0.0,
+    "pcb_vs_keepout_gnss": 0.0,
+    "battery_vs_keepout_lte": 0.0,
+    "battery_vs_keepout_gnss": 0.0,
+    "case_top_vs_ring": 0.0,
+    "case_bottom_vs_ring": 0.0,
+    "case_top_vs_button": 0.0,
+    "ring_vs_button": 0.0
+  },
+  "interference_solid_count": {
+    "case_top_vs_pcb": 0,
+    "case_bottom_vs_pcb": 0,
+    "case_top_vs_battery": 0,
+    "case_bottom_vs_battery": 0,
+    "pcb_vs_battery": 0,
+    "pcb_vs_foam": 0,
+    "battery_vs_foam": 0,
+    "pcb_vs_keepout_lte": 0,
+    "pcb_vs_keepout_gnss": 0,
+    "battery_vs_keepout_lte": 0,
+    "battery_vs_keepout_gnss": 0,
+    "case_top_vs_ring": 0,
+    "case_bottom_vs_ring": 0,
+    "case_top_vs_button": 0,
+    "ring_vs_button": 0
+  },
+  "enclosure_outer_mm": [
+    40.0,
+    48.0,
+    13.5
+  ],
+  "battery_volume_mm3": 5128.2,
+  "battery_nominal_mm3": 5291.6,
+  "dial_markings": {
+    "numerals": [
+      "12",
+      "3",
+      "6",
+      "9"
+    ],
+    "numeral_radius_mm": 11.6,
+    "numeral_cap_height_mm": 2.0,
+    "engrave_depth_mm": 0.15,
+    "index_notches": 8,
+    "index_notch_angles_deg": [
+      30,
+      60,
+      120,
+      150,
+      210,
+      240,
+      300,
+      330
+    ],
+    "index_notch_depth_mm": 0.12
+  }
+}

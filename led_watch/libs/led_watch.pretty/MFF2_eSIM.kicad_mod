@@ -1,0 +1,108 @@
+(footprint "MFF2_eSIM"
+  (version 20241229)
+  (generator "kicad-mcp")
+  (generator_version "9.0")
+  (layer "F.Cu")
+  (descr "MFF2 / QFN-8 industrial eSIM, 5 x 6 mm body, 1.27 mm pitch. VERIFY pad-to-pin mapping against the 1NCE MFF2 drawing before ordering; two pinout variants exist.")
+  (tags "eSIM MFF2 SIM 1NCE QFN-8")
+
+  (property "Reference" "REF**" (at 0 -1.27 0)
+    (layer "F.SilkS")
+    (uuid "c1d5fc6f-0d5d-464e-ac25-304fb6a6f898")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+  (property "Value" "MFF2_eSIM" (at 0 1.27 0)
+    (layer "F.Fab")
+    (uuid "7a97fc4b-df40-4da0-af8e-b2ba46214de1")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+  (property "Datasheet" "" (at 0 0 0)
+    (layer "F.Fab")
+    (uuid "a58df4ae-c25a-44d7-9516-0913f4137dee")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+
+  (fp_rect
+    (start -3.6 -3.2)
+    (end 3.6 3.2)
+    (stroke (width 0.05) (type default))
+    (fill none)
+    (layer "F.CrtYd")
+    (uuid "4c305f27-4c90-401b-8715-50f834f35520")
+  )
+
+  (fp_rect
+    (start -2.5 -3)
+    (end 2.5 3)
+    (stroke (width 0.12) (type default))
+    (fill none)
+    (layer "F.SilkS")
+    (uuid "8731aff3-8cc1-4b1d-9b43-1e9930032869")
+  )
+
+  (fp_rect
+    (start -2.5 -3)
+    (end 2.5 3)
+    (stroke (width 0.1) (type default))
+    (fill none)
+    (layer "F.Fab")
+    (uuid "265245dc-9c56-4566-b4f6-ac8d692fab6c")
+  )
+
+  (pad "1" smd rect
+    (at -2.9 -1.905)
+    (size 1 0.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (uuid "2c2b4585-d1df-4bb8-bccb-22e217e982ef")
+  )
+
+  (pad "2" smd rect
+    (at -2.9 -0.635)
+    (size 1 0.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (uuid "0be73419-71ac-4705-be9c-389d75aa1bc5")
+  )
+
+  (pad "3" smd rect
+    (at -2.9 0.635)
+    (size 1 0.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (uuid "5c3322f4-7876-4e0b-bed2-a070cd25a5b9")
+  )
+
+  (pad "4" smd rect
+    (at -2.9 1.905)
+    (size 1 0.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (uuid "e9381201-4034-43b2-9a01-99c2ef02fd82")
+  )
+
+  (pad "5" smd rect
+    (at 2.9 1.905)
+    (size 1 0.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (uuid "d0fc196a-3111-4e0e-8092-e07f50d5634e")
+  )
+
+  (pad "6" smd rect
+    (at 2.9 0.635)
+    (size 1 0.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (uuid "e4254d24-bc5b-4ca6-b493-70d5f60148a6")
+  )
+
+  (pad "7" smd rect
+    (at 2.9 -0.635)
+    (size 1 0.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (uuid "0ae1c8c4-258c-4b2e-84b2-3a48468a66b7")
+  )
+
+  (pad "8" smd rect
+    (at 2.9 -1.905)
+    (size 1 0.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (uuid "469b9612-9fb2-4d68-94d3-f0047d52caff")
+  )
+
+)
