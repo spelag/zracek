@@ -1,2 +1,3 @@
 # zracek
-Ada Hack solution.
+
+Keep track of the air quality around you.
