@@ -1,6 +1,6 @@
 # ARSO nadzorna plošča: datoteke
 
-Tehnični opis skript, ki sestavljajo ploščo za izbiro lokacije nove merilne postaje. Vse skripte so Python (razen `shema.sql`) in berejo podatkovni paket organizatorja, razpakiran v mapo `data/`.
+Tehnični opis skript, ki sestavljajo ploščo za izbiro lokacije nove merilne postaje. Vse skripte so Python (razen `shema.sql`) in berejo podatkovni paket organizatorja. Paket ni del repozitorija; `poti.py` ga poišče v `ARSO_PAKET`, v `data/`, v korenu projekta ali v `./data`.
 
 ## 1. Pregled
 
@@ -32,6 +32,7 @@ python baza.py            # zgradi zrak.db
 streamlit run app.py      # odpre ploščo
 ```
 
+- **Podatkovni paket** (`01_meritve`, `02_modeli`, `04_prostor`; iz https://github.com/vidacex/ARSOhack) `baza.py` poišče samodejno: v `ARSO_PAKET`, v `arso_nadzorna_plosca/data/`, v korenu projekta ali v `./data`. Če ga ne najde, izpiše navodila in se ustavi brez tracebacka.
 - Pred ponovnim zagonom `baza.py` ustavite Streamlit (Ctrl+C), sicer Windows ne dovoli prepisa `zrak.db`.
 - Plošča bere samo bazo, zato je po vsaki spremembi `sim.py`, `agregacija.py` ali `ocena.py` treba znova zagnati `baza.py`.
 - Posamezne faze lahko poženete ločeno: `python sim.py`, `python agregacija.py`, `python ocena.py`.
@@ -52,7 +53,7 @@ Surove točke obstajajo samo v pomnilniku znotraj `baza.py`. V bazo gredo izklju
 Ob uvozu ustvari sintetične uporabnike.
 
 - **Bere:** `kn_stavbe_atributi.csv.gz`, `osm_obcutljive_lokacije.geojson`, `mol_cetrtne_skupnosti.geojson` (samo pri zagonu kot skripta).
-- **Pot do podatkov** je konstanta `P = "data/04_prostor/"` na vrhu datoteke. Popravite jo, če je paket drugje.
+- **Pot do podatkov:** datoteke poišče `poti.najdi()` po celotnem podatkovnem paketu. Paket mora biti v `ARSO_PAKET`, v `data/`, v korenu projekta ali v `./data` (glej `poti.py`).
 - **Nastavitve (vrh datoteke):** `N` (30.000), `SEED` (42), `DELEZI_PROFILOV` (70/15/15), `SUM_M` (šum 15 m), `ŠOLA_OD_UTC`/`ŠOLA_DO_UTC` (7 do 14), `DELEZ_DELOVNIH` (0,6).
 - **Uvoz vrne:** `users` (lat, lon, profil, šola, delovno mesto) in `sola`.
 - **`posnetek(users, ura_utc)`** vrne anonimne točke `time_utc, lat, lon, profil` za uro. Otroci so med 7 in 14 UTC v eni od treh najbližjih šol ali vrtcev, zaposleni odrasli v stavbi s poslovnimi prostori (uteži = število prostorov, samo MOL).
@@ -65,7 +66,7 @@ Ob uvozu ustvari sintetične uporabnike.
 - `n_ranljivi` se računa, a se ne shranjuje v bazo (plošča ga ne uporablja, pri majhnih celicah bi lahko razkril posameznike).
 
 ### ocena.py
-- **`najdi(ime)`** poišče datoteko kjerkoli pod `data/` (`DATA = "data"`).
+- **`najdi(ime)`** poišče datoteko kjerkoli pod podatkovnim paketom (glej `poti.py`).
 - **`pripravi(agg)`** doda celicam lastnosti:
   - `lat`, `lon`, `km2`: središče in površina,
   - `pm`: zimsko povprečje PM2.5 iz `camx_zimsko_povprecje_slo.tif` (vzorec v središču; pas 1 predpostavljen kot PM2.5),
@@ -133,7 +134,7 @@ Nastanejo ob samostojnem zagonu posameznih skript in za ploščo niso potrebne: 
 ## 8. Kaj preveriti pri prvem zagonu
 
 1. **Pas CAMx rastra:** `ocena.py` predpostavlja, da je pas 1 PM2.5. Vrednosti `pm` morajo biti približno 15 do 30 µg/m³. Če so višje, je to verjetno PM10 (`band=2` v `dodaj_pm`).
-2. **Pot do podatkov v `sim.py`:** `P = "data/04_prostor/"` je trdo zapisana.
+2. **Pot do podatkov:** `baza.py` poišče paket samodejno (glej `poti.py`). Če ga ne najde, izpiše navodila in se ustavi; če manjka posamezna datoteka, izpiše njeno ime in povezavo do paketa.
 3. **Izpis `baza.py`:** na koncu mora našteti vrstice po tabelah (`celica`, `zasedenost`, `zasedenost_povzetek`, `postaja`, `obcutljiva_lokacija`).
 4. **Postaje EEA:** če nimajo imen, so se uporabila nadomestna imena (ni napaka).
 

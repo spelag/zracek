@@ -9,13 +9,17 @@ Uporaba:
     python sim.py                 # ustvari sim_uporabniki_<ura>h.csv
     from sim import users, posnetek
 """
+from poti import PAKET, najdi, navodila_za_paket
+
+if PAKET is None:           # jasno sporočilo namesto tracebacka
+    raise SystemExit(navodila_za_paket())
+
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 from scipy.spatial import cKDTree
 
 # ---------------------------------------------------------------- nastavitve
-P = "data/04_prostor/"      # popravite, če ste paket razpakirali drugam
 N = 30000                   # št. simuliranih uporabnikov (~7 % prebivalcev MOL, predpostavka)
 SEED = 42
 DELEZI_PROFILOV = {"odrasel": 0.70, "otrok": 0.15, "starejsi": 0.15}   # predpostavka
@@ -30,7 +34,7 @@ rng = np.random.default_rng(SEED)
 
 # ------------------------------------------------- 1) stanovanjske stavbe MOL
 def nalozi_stavbe():
-    st = pd.read_csv(P + "kn_stavbe_atributi.csv.gz")
+    st = pd.read_csv(najdi("kn_stavbe_atributi.csv.gz"))
     st = st[st["obcina_sifra"].astype(str).str.zfill(3) == "061"]
     st = st[st["stanovanjska"].astype(str).str.lower() == "true"]
     st = st.dropna(subset=["x_d96", "y_d96"])
@@ -40,7 +44,7 @@ def nalozi_stavbe():
 # ------------------------------------------------- 2) občutljive lokacije (OSM)
 def nalozi_sole():
     # uporabimo geojson, ker ima zagotovo geometrijo (CSV morda nima koordinat)
-    ob = gpd.read_file(P + "osm_obcutljive_lokacije.geojson").to_crs(4326)
+    ob = gpd.read_file(najdi("osm_obcutljive_lokacije.geojson")).to_crs(4326)
     ob = ob[ob["kategorija"].isin(["vrtec", "sola"])].copy()
     ob["lat"] = ob.geometry.y
     ob["lon"] = ob.geometry.x
@@ -85,7 +89,7 @@ users.loc[_otroci, "sola_lon"] = sola["lon"].to_numpy()[_pick]
 
 # zaposleni odrasli: FIKSNO delovno mesto v stavbi s poslovnimi prostori (utež = število prostorov)
 def nalozi_delovna_mesta():
-    df = pd.read_csv(P + "kn_stavbe_atributi.csv.gz")
+    df = pd.read_csv(najdi("kn_stavbe_atributi.csv.gz"))
     df = df[df["obcina_sifra"].astype(str).str.zfill(3) == "061"]
     df = df.dropna(subset=["x_d96", "y_d96"])
     df = df[df["stevilo_poslovnih_prostorov"].fillna(0) > 0]
@@ -129,7 +133,7 @@ if __name__ == "__main__":
     print(f"Ustvarjeno: {len(users)} uporabnikov, datoteke sim_uporabniki_*h.csv")
 
     # preverjanje: uporabniki po četrtnih skupnostih
-    cs = gpd.read_file(P + "mol_cetrtne_skupnosti.geojson").to_crs(4326)
+    cs = gpd.read_file(najdi("mol_cetrtne_skupnosti.geojson")).to_crs(4326)
     g = gpd.GeoDataFrame(
         users, geometry=gpd.points_from_xy(users.lon, users.lat), crs=4326
     )

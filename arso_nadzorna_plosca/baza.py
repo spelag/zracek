@@ -13,13 +13,21 @@ import sqlite3
 import uuid
 from pathlib import Path
 
+from poti import PAKET, navodila_za_paket
+
+if PAKET is None:           # jasna navodila namesto FileNotFoundError v sim.py
+    raise SystemExit(navodila_za_paket())
+
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 
-from sim import users, posnetek, DATUM, N, DELEZ_DELOVNIH
-from agregacija import agregiraj, K, RES
-from ocena import pripravi, najdi
+try:
+    from sim import users, posnetek, DATUM, N, DELEZ_DELOVNIH
+    from agregacija import agregiraj, K, RES
+    from ocena import pripravi, najdi
+except FileNotFoundError as e:      # paket je, a kakšna datoteka manjka
+    raise SystemExit(f"\n{e}\n\n{navodila_za_paket()}")
 
 # Same database as app.py and the API bridge (arsodata/zrak_baza.py).
 DB = os.environ.get("ZRAK_DB") or str(Path(__file__).with_name("zrak.db"))
@@ -119,6 +127,7 @@ def tabela_obcutljivih():
 
 # ------------------------------------------------------------------ glavni tok
 def main():
+    print("Podatkovni paket:", PAKET)
     p = Path(DB)
     if p.exists():
         p.unlink()                                     # ponovna gradnja iz nič

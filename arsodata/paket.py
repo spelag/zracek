@@ -4,12 +4,30 @@ Uporaba v zvezku:  import sys; sys.path.insert(0, "."); from paket import *
 Vse poti so relativne na koren paketa (podatki/paket/), ki je privzeto ".." glede na mapo primeri/.
 """
 import math
+import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-P = Path(__file__).resolve().parent.parent  # koren paketa
+
+def _izberi_koren() -> Path:
+    """Koren podatkovnega paketa: ARSO_PAKET, koren projekta ali koren/data."""
+    env = os.environ.get("ARSO_PAKET")
+    if env:
+        p = Path(env).expanduser()
+        if (p / "01_meritve").is_dir():
+            return p
+        if (p / "data" / "01_meritve").is_dir():
+            return p / "data"
+    koren = Path(__file__).resolve().parent.parent
+    for kandidat in (koren, koren / "data"):
+        if (kandidat / "01_meritve").is_dir():
+            return kandidat
+    return koren
+
+
+P = _izberi_koren()  # koren paketa
 
 # Zunanji podatkovni paket (potreben samo za offline/arhivski način).
 DATA_URL = "https://github.com/vidacex/ARSOhack"
@@ -43,6 +61,9 @@ def navodila_za_podatke():
         "  cd ARSOhack",
         f"  cp -r 01_meritve 02_modeli 03_vreme_inverzija 04_prostor {P}/",
         "  # (or symlink the same directories into that location)",
+        "",
+        "Or point at an existing checkout:",
+        "  export ARSO_PAKET=/path/to/ARSOhack",
         "",
         "The API needs 01_meritve, 02_modeli and 03_vreme_inverzija.",
         "04_prostor is only needed by arso_nadzorna_plosca/baza.py.",

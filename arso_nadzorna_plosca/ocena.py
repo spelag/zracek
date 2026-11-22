@@ -11,7 +11,6 @@ Izhod: ocena_<ura>h.csv (celica, vrednosti členov, prispevki členov, skupna oc
   dist  : razdalja do najbližje uradne postaje    -> višja = bolj upravičena lokacija
   sens  : gostota občutljivih lokacij (OSM)       -> vrtci, šole, bolnišnice, domovi
 """
-import glob
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -23,16 +22,10 @@ from rasterio.mask import mask as rio_mask
 from shapely.geometry import Polygon
 from shapely.ops import transform as shp_transform
 
-DATA = "data"
+# najdi() išče po celotnem podatkovnem paketu (ARSO_PAKET, data/, koren projekta ...)
+from poti import najdi  # noqa: F401  (tudi ponovni izvoz za baza.py)
+
 UTEZI = dict(users=0.25, gral=0.25, pm=0.05, dist=0.25, sens=0.20)
-
-
-def najdi(ime):
-    """Poišče datoteko kjerkoli pod data/ (da ni treba ugibati podmap)."""
-    p = glob.glob(f"{DATA}/**/{ime}", recursive=True)
-    if not p:
-        raise FileNotFoundError(f"{ime} ni pod {DATA}/")
-    return p[0]
 
 
 def norm(s, lo=5, hi=95):
