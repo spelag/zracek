@@ -18,14 +18,14 @@
 // cycle per press. Wi-Fi stays connected between cycles and the GPS UART is
 // pumped continuously, so fixes stay warm and subsequent presses are fast.
 //
-// Location policy:
+// Location policy (fast-lookup demo):
 //   * A live fix is cached in NVS flash together with its UTC timestamp.
-//   * A cycle probes for a fresh fix for ~gpsQuickProbeMs.
-//   * If none arrives:
-//       - cached fix younger than locationValidHours -> use it immediately.
-//       - cached fix older (or age unknown)          -> try a bit longer,
-//                                                       then use it anyway.
-//       - no cached fix at all                       -> hunt up to gpsColdHuntMs.
+//   * A lookup waits at most gpsQuickProbeMs (1.2 s by default) for a fresh fix.
+//   * If none is ready, it immediately uses the cached fix, else the demo
+//     fallback. It never blocks for a cold GPS start.
+//   * The GPS receiver keeps running while idle; loop() and the display wait
+//     keep parsing it, so a cold start resolves itself in the background. The
+//     device stays responsive to button presses the whole time.
 //
 // Companion-app / configuration support:
 //   * Every runtime setting lives in the Config struct below and is persisted
@@ -59,7 +59,7 @@ constexpr uint16_t NUM_LEDS                 = 10;     // physical LEDs in the ri
 // Setup-mode behaviour (not exposed: it guards entry into the config UI).
 constexpr uint32_t CONFIG_HOLD_MS          = 1800;   // hold this long while displaying -> setup mode
 constexpr const char* DEV_PIN              = "271828"; // developer PIN (change before shipping!)
-constexpr const char* FW_VERSION           = "1.1.0-ble";
+constexpr const char* FW_VERSION           = "1.2.0-ble";
 
 // ============================================================================
 // RUNTIME CONFIGURATION
@@ -95,11 +95,11 @@ struct Config {
     bool     downscaleWorstCase  = true;     // bucket downscale = worst class
     uint8_t  startLedIndex       = 0;        // ring index for hour [0]
     bool     reverseRing         = false;
-    uint32_t colorClass1         = 0x00C83C; // good         - green
-    uint32_t colorClass2         = 0xFFC800; // satisfactory - yellow
-    uint32_t colorClass3         = 0xFF5A00; // moderate     - orange
-    uint32_t colorClass4         = 0xD21400; // bad          - red
-    uint32_t colorClass5         = 0x820000; // very bad     - dark red
+    uint32_t colorClass1         = 0xFF00C83C; // good         - green   (AARRGGBB)
+    uint32_t colorClass2         = 0xFFFFC800; // satisfactory - yellow
+    uint32_t colorClass3         = 0xFFFF5A00; // moderate     - orange
+    uint32_t colorClass4         = 0xFFD21400; // bad          - red
+    uint32_t colorClass5         = 0xFF820000; // very bad     - dark red
 
     // ---- Timing (ms unless noted) ----
     uint32_t displayDurationMs   = 8000;
@@ -110,10 +110,7 @@ struct Config {
 
     // ---- Location cache policy ----
     bool     useLocationCache    = true;
-    uint32_t locationValidHours  = 6;
-    uint32_t gpsQuickProbeMs     = 2500;
-    uint32_t gpsStaleRetryMs     = 6000;
-    uint32_t gpsColdHuntMs       = 60000;
+    uint32_t gpsQuickProbeMs     = 1200;     // short lookup window; never blocks on cold GPS
 
     // ---- Demo fallback ----
     bool     useDefaultLocation  = true;
@@ -257,15 +254,10 @@ static const FieldDef FIELDS[] = {
 
     // ---- Location ----
     FD("useLocationCache", "Use cached location", "Location",
-       FType::BOOL, useLocationCache, 0, 1, 1, 0, "Fall back to the last known fix when no new one arrives."),
-    FD("locationValidHours", "Cached fix validity (hours)", "Location",
-       FType::UINT, locationValidHours, 1, 720, 1, 0, "Trust a cached fix for this long without a new fix."),
-    FD("gpsQuickProbeMs", "Quick GPS probe (ms)", "Location",
-       FType::UINT, gpsQuickProbeMs, 500, 120000, 100, 0, "Initial probe before falling back to the cache."),
-    FD("gpsStaleRetryMs", "Stale-cache retry (ms)", "Location",
-       FType::UINT, gpsStaleRetryMs, 500, 600000, 500, 0, "Extra probing when the cached fix is stale."),
-    FD("gpsColdHuntMs", "Cold-start hunt (ms)", "Location",
-       FType::UINT, gpsColdHuntMs, 1000, 600000, 1000, 0, "Probing time when there is no cached fix at all."),
+       FType::BOOL, useLocationCache, 0, 1, 1, 0, "Use the last known fix immediately when no new fix is ready."),
+    FD("gpsQuickProbeMs", "Fresh-fix lookup window (ms)", "Location",
+       FType::UINT, gpsQuickProbeMs, 0, 10000, 100, 0,
+       "Maximum time a lookup waits for a new GPS fix before using the cache/fallback. Keep it short for a responsive demo."),
     FD("useDefaultLocation", "Use demo fallback", "Location",
        FType::BOOL, useDefaultLocation, 0, 1, 1, 0, "Use a fixed location when nothing else is available."),
     FD("defaultLat", "Demo latitude", "Location",
@@ -365,7 +357,7 @@ static const char* readString(const Config& c, const FieldDef& f) {
 static uint32_t readColor(const Config& c, const FieldDef& f) {
     uint32_t v = 0;
     memcpy(&v, fieldBase(c, f), sizeof(v));
-    return v & 0xFFFFFFu;
+    return v;   // 0xAARRGGBB
 }
 
 static const FieldDef* findField(const char* key) {
@@ -408,6 +400,62 @@ static void normalizeConfig(Config& c) {
     if (c.configModeTimeoutMs < 30000) c.configModeTimeoutMs = 30000;
 }
 
+// ============================================================================
+// RGBA COLOUR HELPERS
+// Colours are stored as 0xAARRGGBB. WS2812 has no real alpha, so A is used as
+// an intensity scale for that class colour (A=255 is unchanged).
+// JSON form is CSS-style #RRGGBBAA; 6-digit #RRGGBB is accepted with A=255.
+// ============================================================================
+static uint32_t packRgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    return ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+}
+
+static int hexNibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static bool hexPair(const char* s, uint8_t& out) {
+    const int hi = hexNibble(s[0]);
+    const int lo = hexNibble(s[1]);
+    if (hi < 0 || lo < 0) return false;
+    out = static_cast<uint8_t>((hi << 4) | lo);
+    return true;
+}
+
+static bool parseColorString(const char* s, uint32_t& out) {
+    if (!s) return false;
+    if (s[0] == '#') s++;
+    const size_t len = strlen(s);
+    if (len != 6 && len != 8) return false;
+
+    uint8_t r, g, b, a = 255;
+    if (!hexPair(s, r) || !hexPair(s + 2, g) || !hexPair(s + 4, b)) return false;
+    if (len == 8 && !hexPair(s + 6, a)) return false;
+
+    out = packRgba(r, g, b, a);
+    return true;
+}
+
+static void formatColorHex(char* buf, size_t len, uint32_t v) {
+    snprintf(buf, len, "#%02X%02X%02X%02X",
+             (unsigned)((v >> 16) & 0xFF), (unsigned)((v >> 8) & 0xFF),
+             (unsigned)(v & 0xFF), (unsigned)((v >> 24) & 0xFF));
+}
+
+static uint8_t scaleChannel(uint8_t c, uint8_t a) {
+    return static_cast<uint8_t>((static_cast<uint16_t>(c) * a + 127) / 255);
+}
+
+static CRGB rgbaToCrgb(uint32_t v) {
+    const uint8_t a = (v >> 24) & 0xFF;
+    return CRGB(scaleChannel((v >> 16) & 0xFF, a),
+                scaleChannel((v >> 8) & 0xFF, a),
+                scaleChannel(v & 0xFF, a));
+}
+
 static void configToJson(JsonObject o, const Config& c, bool publicOnly, bool includeSecret) {
     for (size_t i = 0; i < FIELD_COUNT; i++) {
         const FieldDef& f = FIELDS[i];
@@ -431,8 +479,8 @@ static void configToJson(JsonObject o, const Config& c, bool publicOnly, bool in
                 o[f.key] = readString(c, f);
                 break;
             case FType::COLOR: {
-                char buf[8];
-                snprintf(buf, sizeof(buf), "#%06X", (unsigned)readColor(c, f));
+                char buf[10];
+                formatColorHex(buf, sizeof(buf), readColor(c, f));
                 o[f.key] = buf;
                 break;
             }
@@ -517,26 +565,24 @@ static bool setFieldFromJson(Config& c, const FieldDef& f, JsonVariantConst v, S
             return true;
         }
         case FType::COLOR: {
-            uint32_t rgb = 0;
+            uint32_t rgba = 0;
             if (v.is<const char*>()) {
-                const char* s = v.as<const char*>();
-                if (s[0] == '#') s++;
-                if (strlen(s) != 6) { err = "expected #RRGGBB"; return false; }
-                char* end = nullptr;
-                rgb = (uint32_t)strtoul(s, &end, 16);
-                if (end == s || *end != '\0' || rgb > 0xFFFFFFu) {
-                    err = "expected #RRGGBB";
+                if (!parseColorString(v.as<const char*>(), rgba)) {
+                    err = "expected #RRGGBB or #RRGGBBAA";
                     return false;
                 }
             } else if (v.is<long long>()) {
+                // Legacy numeric form: 0xRRGGBB, fully opaque.
                 const long long n = v.as<long long>();
                 if (n < 0 || n > 0xFFFFFF) { err = "colour out of range"; return false; }
-                rgb = (uint32_t)n;
+                rgba = packRgba((uint8_t)((n >> 16) & 0xFF),
+                                (uint8_t)((n >> 8) & 0xFF),
+                                (uint8_t)(n & 0xFF), 255);
             } else {
-                err = "expected #RRGGBB";
+                err = "expected #RRGGBB or #RRGGBBAA";
                 return false;
             }
-            memcpy(dst, &rgb, sizeof(rgb));
+            memcpy(dst, &rgba, sizeof(rgba));
             return true;
         }
     }
@@ -588,8 +634,8 @@ static void fieldDefaultToJson(JsonObject o, const FieldDef& f) {
         case FType::FLOAT:  o["default"] = readFloat(g_defaults, f);  break;
         case FType::DOUBLE: o["default"] = readDouble(g_defaults, f); break;
         case FType::COLOR: {
-            char buf[8];
-            snprintf(buf, sizeof(buf), "#%06X", (unsigned)readColor(g_defaults, f));
+            char buf[10];
+            formatColorHex(buf, sizeof(buf), readColor(g_defaults, f));
             o["default"] = buf;
             break;
         }
@@ -858,6 +904,13 @@ size_t pumpGps() {
         gps.encode(c);
         count++;
     }
+
+    // If the receiver has just achieved a fix in the background, mirror it into
+    // the location cache immediately. NVS writes inside storeLocation() are
+    // throttled, so this is cheap even though pumpGps() runs continuously.
+    if (gps.location.isUpdated() && isFreshFix()) {
+        storeLocation(gps.location.lat(), gps.location.lng());
+    }
     return count;
 }
 
@@ -885,16 +938,16 @@ void anonymizeCoordinates(double lat, double lon, double meters, double &outLat,
 // LED HELPERS
 // ============================================================================
 CRGB classToColor(int aqClass) {
-    uint32_t rgb = 0;
+    uint32_t rgba = 0;
     switch (aqClass) {
-        case 1: rgb = g_cfg.colorClass1; break;
-        case 2: rgb = g_cfg.colorClass2; break;
-        case 3: rgb = g_cfg.colorClass3; break;
-        case 4: rgb = g_cfg.colorClass4; break;
-        case 5: rgb = g_cfg.colorClass5; break;
+        case 1: rgba = g_cfg.colorClass1; break;
+        case 2: rgba = g_cfg.colorClass2; break;
+        case 3: rgba = g_cfg.colorClass3; break;
+        case 4: rgba = g_cfg.colorClass4; break;
+        case 5: rgba = g_cfg.colorClass5; break;
         default: return CRGB(0, 0, 0);
     }
-    return CRGB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+    return rgbaToCrgb(rgba);
 }
 
 int getCircularLedIndex(uint16_t logicalIndex) {
@@ -1022,46 +1075,23 @@ void startWiFi() {
 }
 
 // ============================================================================
-// LOCATION ACQUISITION (Wi-Fi and GPS polled concurrently)
+// LOCATION ACQUISITION
+//
+// A lookup waits only briefly for a *new* GPS fix, then immediately uses the
+// cached fix or the demo fallback. The receiver keeps running in the background
+// (loop() and waitForDisplayOrConfig() keep pumping it), so a cold-start fix can
+// take as long as it likes without ever blocking a quick lookup.
 // ============================================================================
-// Decide how long to keep probing for a fix, based on the cached fix's age.
-uint32_t decideGpsBudget(uint32_t elapsedMs) {
-    if (!g_cfg.useLocationCache || !rtcHaveLocation) {
-        INFO("[GPS] no cached fix; hunting up to %lus\n",
-             static_cast<unsigned long>(g_cfg.gpsColdHuntMs / 1000));
-        return g_cfg.gpsColdHuntMs;
-    }
-
-    const uint32_t now = currentGpsEpoch();
-    if (now == 0 || rtcLastFixEpoch == 0) {
-        INFO("[GPS] cached age unknown; trying a little longer\n");
-        return g_cfg.gpsStaleRetryMs;
-    }
-
-    const uint32_t ageSec = (now > rtcLastFixEpoch) ? (now - rtcLastFixEpoch) : 0;
-    const uint32_t validSec = g_cfg.locationValidHours * 3600UL;
-    if (ageSec > validSec) {
-        INFO("[GPS] cached fix %luh old; trying a little longer\n",
-             static_cast<unsigned long>(ageSec / 3600));
-        return g_cfg.gpsStaleRetryMs;
-    }
-
-    INFO("[GPS] no new fix; cached fix %lum old is still valid\n",
-         static_cast<unsigned long>(ageSec / 60));
-    return elapsedMs;   // stop probing now, use the cache
-}
-
 AcquireResult acquireWifiAndLocation() {
     AcquireResult res;
     const uint32_t startMs = millis();
+    const uint32_t probeMs = g_cfg.gpsQuickProbeMs;
 
-    bool wifiReady         = false;
-    bool wifiTimedOut      = false;
-    bool haveFresh         = false;
-    bool gpsSettled        = false;   // budget decision made
-    bool gpsDone           = false;   // no more probing
-    uint32_t gpsEndMs      = g_cfg.gpsQuickProbeMs;
-    uint32_t uartBytes     = 0;
+    bool wifiReady    = false;
+    bool wifiTimedOut = false;
+    bool haveFresh    = false;
+    bool gpsDone      = false;   // short probe window has elapsed
+    uint32_t uartBytes = 0;
 
     for (;;) {
         const uint32_t elapsed = millis() - startMs;
@@ -1080,11 +1110,9 @@ AcquireResult acquireWifiAndLocation() {
             }
         }
 
-        // Wi-Fi failure is fatal for this cycle: stop and show red rather than
-        // continuing to pulse as if we were still seeking.
         if (wifiTimedOut) break;
 
-        // ---- GPS: always drain and try to catch a fresh fix ----
+        // ---- GPS: drain and look for a fresh fix ----
         uartBytes += pumpGps();
 
         if (!haveFresh && isFreshFix()) {
@@ -1095,9 +1123,19 @@ AcquireResult acquireWifiAndLocation() {
             res.loc.ageSec   = 0;
             res.loc.ageKnown = true;
             storeLocation(res.loc.lat, res.loc.lon);
-            INFO("[GPS] fix in %lu ms (%lu sats)\n",
+            INFO("[GPS] fresh fix in %lu ms (%lu sats)\n",
                  static_cast<unsigned long>(elapsed),
                  static_cast<unsigned long>(gps.satellites.value()));
+        }
+
+        // Stop holding the display for a new fix after the short probe window.
+        if (!gpsDone && elapsed >= probeMs) {
+            gpsDone = true;
+            if (!haveFresh) {
+                INFO("[GPS] no fresh fix after %lu ms; using %s now\n",
+                     static_cast<unsigned long>(probeMs),
+                     (g_cfg.useLocationCache && rtcHaveLocation) ? "cached location" : "fallback location");
+            }
         }
 
         // A press while waiting means "stop waiting, use what we have".
@@ -1106,23 +1144,11 @@ AcquireResult acquireWifiAndLocation() {
             break;
         }
 
-        // ---- Decide when to stop probing if still no fix ----
-        if (!haveFresh && !gpsDone) {
-            if (!gpsSettled) {
-                // Wait for GPS time to arrive (one NMEA cycle) or the quick window to expire.
-                if (currentGpsEpoch() != 0 || elapsed >= g_cfg.gpsQuickProbeMs) {
-                    gpsSettled = true;
-                    gpsEndMs   = decideGpsBudget(elapsed);
-                }
-            }
-            if (gpsSettled && elapsed >= gpsEndMs) {
-                gpsDone = true;
-            }
-        }
+        // Done as soon as Wi-Fi is up and either a fix arrived or the probe
+        // window expired. GPS keeps running in the background afterwards.
+        if (wifiReady && (haveFresh || gpsDone)) break;
 
-        if ((wifiReady || wifiTimedOut) && (haveFresh || gpsDone)) break;
-
-        // Breathing blue while seeking (Wi-Fi or GPS) - the "working on it" cue.
+        // Breathing blue while Wi-Fi connects / the short probe runs.
         if (g_cfg.enableStatusLed) {
             const uint8_t pulse = beatsin8(40, 12, 90);
             leds[g_cfg.startLedIndex % NUM_LEDS] = CRGB(0, 0, pulse);
@@ -1140,7 +1166,7 @@ AcquireResult acquireWifiAndLocation() {
 
     res.wifiOk = wifiReady;
 
-    // ---- Resolve the best available location ----
+    // ---- Resolve the best available location immediately ----
     if (haveFresh) {
         return res;
     }
@@ -1152,6 +1178,12 @@ AcquireResult acquireWifiAndLocation() {
         const uint32_t now = currentGpsEpoch();
         res.loc.ageKnown = (now != 0 && rtcLastFixEpoch != 0 && now > rtcLastFixEpoch);
         res.loc.ageSec   = res.loc.ageKnown ? (now - rtcLastFixEpoch) : 0;
+        if (res.loc.ageKnown) {
+            INFO("[GPS] using cached fix (%lum old)\n",
+                 static_cast<unsigned long>(res.loc.ageSec / 60));
+        } else {
+            INFO("[GPS] using cached fix (age unknown)\n");
+        }
         return res;
     }
 
@@ -1159,6 +1191,7 @@ AcquireResult acquireWifiAndLocation() {
         res.loc.source = LocSource::FALLBACK;
         res.loc.lat    = g_cfg.defaultLat;
         res.loc.lon    = g_cfg.defaultLon;
+        INFO("[GPS] using demo fallback location\n");
         return res;
     }
 
@@ -1324,6 +1357,8 @@ void stopWiFi() {
 //   {"op":"getSchema"}                          developer schema (auth)
 //   {"op":"getDev"}                             all settings (auth)
 //   {"op":"setDev","values":{...}}              apply any settings (auth)
+//   {"op":"previewColors","colors":[...]}       live LED colour preview (auth)
+//   {"op":"clearPreview"}                       restore ambient preview (auth)
 //   {"op":"exit"}                               leave setup mode (no auth)
 //   {"op":"sleep"}                              alias for exit (no auth)
 //   {"op":"factoryReset"}                       restore defaults, stay running (auth)
@@ -1351,6 +1386,13 @@ static volatile bool         gWantDisconnect = false;
 static volatile bool         gRestartAdvertising = false;
 static volatile uint16_t     gNegotiatedMtu = 23;
 static uint32_t              gLastActivityMs = 0;
+
+// Live colour preview requested by the developer app while editing. It
+// overrides the ambient setup-mode preview for a short time.
+static CRGB                  gPreviewColors[5];
+static volatile bool         gPreviewActive = false;
+static uint32_t              gPreviewSetMs  = 0;
+static constexpr uint32_t    PREVIEW_TIMEOUT_MS = 30000;
 
 // Advertising API differs between the legacy and Bluetooth-5 extended builds.
 // ESP32 core 4.x enables CONFIG_BT_NIMBLE_EXT_ADV on the C3.
@@ -1429,6 +1471,7 @@ class CfgServerCallbacks : public NimBLEServerCallbacks {
         gBleConnected = false;
         gConnHandle   = 0xFFFF;
         gAuthOk       = false;
+        gPreviewActive = false;
         gRxFrame      = "";
         INFO("[BLE] client disconnected (reason %d); advertising again\n", reason);
         // Restart from the main loop: the advertising instance is still being
@@ -1592,6 +1635,7 @@ static void stopBle() {
     gBleStarted = false;
     gNegotiatedMtu = 23;
     gRestartAdvertising = false;
+    gPreviewActive = false;
     INFO("[BLE] stack stopped (heap %lu B, largest block %lu B)\n",
          (unsigned long)ESP.getFreeHeap(), (unsigned long)largestInternalBlock());
 }
@@ -1646,6 +1690,8 @@ static void handleRequest(const String& raw) {
         ops.add("getSchema");
         ops.add("getDev");
         ops.add("setDev");
+        ops.add("previewColors");
+        ops.add("clearPreview");
         ops.add("exit");
         ops.add("factoryReset");
 
@@ -1778,6 +1824,40 @@ static void handleRequest(const String& raw) {
         return;
     }
 
+    if (!strcmp(op, "previewColors")) {
+        if (!gAuthOk) { error("auth_required"); return; }
+        if (!req["colors"].is<JsonArrayConst>()) { error("missing_colors"); return; }
+
+        uint8_t n = 0;
+        for (JsonVariantConst v : req["colors"].as<JsonArrayConst>()) {
+            if (n >= 5) break;
+            uint32_t rgba = 0;
+            if (!v.is<const char*>() || !parseColorString(v.as<const char*>(), rgba)) {
+                error("bad_color");
+                return;
+            }
+            gPreviewColors[n++] = rgbaToCrgb(rgba);
+        }
+        while (n < 5) gPreviewColors[n++] = CRGB(0, 0, 0);
+
+        gPreviewActive = true;
+        gPreviewSetMs  = millis();
+        out["ok"]      = true;
+        out["count"]   = n;
+        INFO("[CFG] colour preview: %u colours\n", (unsigned)n);
+        sendResponse(res);
+        return;
+    }
+
+    if (!strcmp(op, "clearPreview")) {
+        if (!gAuthOk) { error("auth_required"); return; }
+        gPreviewActive = false;
+        out["ok"]      = true;
+        INFO("[CFG] colour preview cleared\n");
+        sendResponse(res);
+        return;
+    }
+
     if (!strcmp(op, "exit") || !strcmp(op, "sleep")) {
         // Not auth-gated: leaving setup mode is harmless, and it lets a public
         // user hand the ring back to the demo without the developer PIN.
@@ -1825,12 +1905,23 @@ static void handleRequest(const String& raw) {
     error("unknown_op");
 }
 
-// Draw a live preview of the ring while in setup mode. The palette shows the
-// current brightness and the configured class colours; the first pixel shows
-// connection state (green = connected, blue pulse = advertising).
+// Draw a live preview of the ring while in setup mode. Normally the palette
+// shows the configured class colours; while the app's colour editor is active,
+// its unsaved colours are shown on the first five LEDs instead.
 static void drawConfigPreview() {
     CRGB target[NUM_LEDS];
     fill_solid(target, NUM_LEDS, CRGB::Black);
+
+    if (gPreviewActive) {
+        if ((millis() - gPreviewSetMs) <= PREVIEW_TIMEOUT_MS) {
+            for (uint8_t i = 0; i < 5; i++) {
+                target[getCircularLedIndex(i)] = gPreviewColors[i];
+            }
+            FastLED.show();
+            return;
+        }
+        gPreviewActive = false;
+    }
 
     for (uint16_t i = 0; i < NUM_LEDS; i++) {
         target[getCircularLedIndex(i)] = classToColor((i % 5) + 1);
@@ -1873,6 +1964,7 @@ static void runConfigMode() {
     gExitSetup         = false;
     gWantDisconnect    = false;
     gRestartAdvertising = false;
+    gPreviewActive     = false;
     gLastActivityMs    = millis();
     drawConfigPreview();
 
@@ -2041,12 +2133,19 @@ void setup() {
     // is sitting in setup mode. Wi-Fi is started lazily when a cycle runs.
     startGps();
 
+    const bool heldAtBoot = (digitalRead(BUTTON_PIN) == HIGH);
+    if (!heldAtBoot) {
+        // Let Wi-Fi connect while the boot sweep runs, so the first lookup is
+        // not delayed by association.
+        startWiFi();
+    }
+
     // Verify every LED once per power-up.
     bootSweep();
 
     // A button held at boot enters setup mode. No deep sleep: after setup mode
     // ends, the demo carries on normally.
-    if (digitalRead(BUTTON_PIN) == HIGH) {
+    if (heldAtBoot) {
         INFO("[SYS] GPIO%u held at boot - entering setup mode\n",
              static_cast<unsigned>(BUTTON_PIN));
         runConfigMode();

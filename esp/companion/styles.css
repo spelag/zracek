@@ -240,9 +240,45 @@ fieldset.card legend {
 .badge.reboot { background: rgba(140, 170, 255, .13); color: #a9bfff; }
 
 .fieldControl { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-.fieldControl input[type="color"] {
-  width: 52px; height: 38px; padding: 3px;
-  background: #0a1714; border: 1px solid var(--line); border-radius: 9px;
+
+/* explicit R/G/B/A colour editor (no system colour dialog) */
+.previewRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.previewRow .help { margin: 8px 0; flex: 1 1 220px; }
+.rgbaEditor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.rgbaEditor .swatch {
+  width: 36px; height: 36px; border-radius: 9px;
+  background: #000;
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05);
+}
+.rgbaEditor .chan {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 10.5px; color: var(--muted); font-weight: 700;
+}
+.rgbaEditor .chan input[type="number"] {
+  width: 58px; max-width: 58px;
+  padding: 7px 4px;
+  text-align: center;
+  font-size: 13px;
+}
+.rgbaEditor .hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 2px;
 }
 .hex { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--muted); }
 
@@ -278,4 +314,7 @@ summary { cursor: pointer; font-weight: 650; padding: 2px 0; }
   .field > .help { grid-column: 1 / -1; }
   .field > .fieldControl { margin-top: 0; }
   .field.boolField { grid-template-columns: 1fr auto; }
+  /* the RGBA editor is wide: give it the full row */
+  .field.colorField { grid-template-columns: 1fr; }
+  .field.colorField > .fieldControl { margin-top: 8px; }
 }

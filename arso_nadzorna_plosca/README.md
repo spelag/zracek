@@ -136,3 +136,29 @@ Nastanejo ob samostojnem zagonu posameznih skript in za ploščo niso potrebne: 
 2. **Pot do podatkov v `sim.py`:** `P = "data/04_prostor/"` je trdo zapisana.
 3. **Izpis `baza.py`:** na koncu mora našteti vrstice po tabelah (`celica`, `zasedenost`, `zasedenost_povzetek`, `postaja`, `obcutljiva_lokacija`).
 4. **Postaje EEA:** če nimajo imen, so se uporabila nadomestna imena (ni napaka).
+
+## 9. Povezava s strežnikom API (`arsodata/server.py`)
+
+Strežnik `arsodata/server.py` odgovarja na `GET /air-quality?lat=&lon=` z 12 urnimi razredi kakovosti zraka. Vsaka veljavna zahteva se hkrati zabeleži v to bazo (`zrak.db`), zato plošča poleg sintetičnega dneva prikazuje tudi dejansko uporabo.
+
+- Točka iz zahteve se preslika v celico H3 z ločljivostjo `h3_res` in pragom `k_prag` iz tabele `konfiguracija`. Surove koordinate se ne shranijo nikoli.
+- Zahteve se štejejo po celici in trenutni UTC uri. Ko celica doseže prag `k`, se vpiše v `zasedenost` z `vir = 'dejansko'`; če za isto celico in uro že obstaja sintetična vrstica, jo nadomesti. Druge celice iste ure ostanejo sintetične.
+- Celice pod pragom se hranijo samo v ločeni, neobjavljeni bazi `zrak_zahteve.db` (samo števci, brez uporabnikov). V `zrak.db` se ne zapiše nobena celica pod pragom, zato `CHECK (n >= k_prag)` ostane nespremenjen.
+- `zasedenost_povzetek` se ob vsaki zahtevi znova izračuna iz objavljenih vrstic in zadržanih števcev.
+- Vsaka HTTP zahteva šteje kot en uporabnik v tisti uri; ponovno pošiljanje iste naprave zvišuje števec, ker API nima identitete naprave.
+- Če baza še ne obstaja, jo strežnik ustvari po `shema.sql`; `baza.py` jo ob ponovni gradnji zamenja in zapiše nov `zagon_id`, zato strežnik stare zasebne števce zavrže.
+
+Nastavitve okolja:
+
+| Spremenljivka | Privzeto | Pomen |
+|---|---|---|
+| `ZRAK_DB` | `arso_nadzorna_plosca/zrak.db` | baza, ki jo bere plošča |
+| `ZRAK_STAGING_DB` | `zrak_zahteve.db` ob `zrak.db` | zasebni števci pod pragom |
+
+```
+pip install flask pandas numpy requests h3
+python arsodata/server.py              # http://127.0.0.1:9161
+streamlit run arso_nadzorna_plosca/app.py
+```
+
+Plošča, `baza.py` in strežnik morajo gledati isto bazo. Pred ponovnim zagonom `baza.py` ustavite strežnik; na Windows datoteke ne bo mogoče prepisati.

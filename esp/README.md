@@ -8,6 +8,12 @@ configuring the ring from an Android phone.
 > cycle on boot and on each button press, and never restarts the ESP. That
 > avoids the white boot flash and repeated cold GPS hunts during a
 > demonstration.
+>
+> **Fast lookups:** a cycle waits at most `gpsQuickProbeMs` (1.2 s by default)
+> for a *new* GPS fix, then immediately uses the cached fix or the demo fallback
+> and fetches the forecast. A cold GPS start keeps running in the background
+> while the device stays responsive to button presses — it is never a visible
+> 60-second wait.
 
 ```
 .
@@ -128,8 +134,8 @@ app partition:
 Verified build output:
 
 ```
-Sketch uses 1449212 bytes (69%) of program storage space. Maximum is 2097152 bytes.
-Global variables use 47844 bytes (14%) of dynamic memory, leaving 279836 bytes for local variables.
+Sketch uses 1450216 bytes (69%) of program storage space. Maximum is 2097152 bytes.
+Global variables use 47852 bytes (14%) of dynamic memory, leaving 279828 bytes for local variables.
 ```
 
 The default 1.2 MB partition reports `Sketch too big`. There is no PSRAM on the
@@ -219,6 +225,14 @@ you a secure context.
    * Secret fields (Wi-Fi password) are never read back; leave blank to keep
      the current value, type a new one to replace it.
    * **Apply changes** sends only the fields you edited.
+   * Colour classes use explicit **R/G/B/A number fields** (0–255) instead of a
+     system colour dialog. While you edit, the unsaved colours are streamed to
+     the ring and shown on its **first five LEDs**; `A` scales intensity.
+     There is also a **Preview colours** button for a manual trigger.
+   * If the colour section says live preview is unavailable (or the app reports
+     `previewColors` was not advertised), the ring is running older firmware.
+     Reflash the latest `firmware.cpp`; the app shows the firmware version under
+     the device name (current: `1.2.0-ble`).
    * **Exit setup** leaves setup mode; BLE is torn down and the ring returns to
      its idle demo state (next button press shows a forecast).
    * **Factory reset** erases the `aircfg` NVS namespace, applies defaults in
@@ -277,7 +291,9 @@ flight at a time).
 {"op":"auth","pin":"271828"}
 {"op":"getSchema"}
 {"op":"getDev"}
-{"op":"setDev","values":{"requestHours":24,"colorClass1":"#00FF80"}}
+{"op":"setDev","values":{"requestHours":24,"colorClass1":"#00FF80FF"}}
+{"op":"previewColors","colors":["#00C83CFF","#FFC800FF","#FF5A00FF","#D21400FF","#820000FF"]}
+{"op":"clearPreview"}
 
 // lifecycle
 {"op":"exit"}           // leave setup mode, no reset (no auth)
@@ -289,10 +305,16 @@ The firmware deliberately has no reboot/sleep operation: nothing in the demo
 restarts or deep-sleeps the ESP. A legacy client sending `{"op":"reboot"}` gets
 `{"ok":false,"error":"unsupported"}`.
 
+While the app's colour editor is active, it streams `previewColors` so the ring
+shows the **unsaved** palette on its first five LEDs. `clearPreview`, a
+disconnect, or a 30-second timeout returns to the ambient setup-mode preview.
+Alpha is an intensity scale (LEDs have no true transparency): `A=255` is the
+full colour, `A=0` is off.
+
 Example responses:
 
 ```json
-{"id":1,"ok":true,"device":"AirRing-1A2B","fw":"1.1.0-ble","mac":"…",
+{"id":1,"ok":true,"device":"AirRing-1A2B","fw":"1.2.0-ble","mac":"…",
  "configMode":true,"authenticated":false,"limits":{…}}
 
 {"ok":true,
@@ -328,7 +350,9 @@ Errors are `{"ok":false,"error":"…"}`. Important codes:
 ]}}
 ```
 
-Types: `bool`, `uint`, `float`, `double`, `string`, `color` (`#RRGGBB`).
+Types: `bool`, `uint`, `float`, `double`, `string`, `color`
+(`#RRGGBBAA`; six-digit `#RRGGBB` is accepted and treated as opaque).
+Colour `A` scales intensity.
 Strings include `maxLength`. Secret strings omit `default` and are never sent in
 `getDev` responses.
 
@@ -401,13 +425,21 @@ also in the public interface.
 `fadeMs`, `requestHours`, `includeCurrent`, `downscaleWorstCase`,
 `startLedIndex`, `reverseRing`, `colorClass1`…`colorClass5`.
 
+Colours are `#RRGGBBAA`. The developer app exposes them as explicit R/G/B/A
+number fields (no system colour picker) and streams the unsaved values to the
+first five LEDs as you edit. `A` scales that class colour's intensity.
+
 ### Timing
 `displayDurationMs`, `wifiTimeoutMs`, `gpsMaxFixAgeMs`, `httpTimeoutMs`,
 `configModeTimeoutMs`.
 
 ### Location
-`useLocationCache`, `locationValidHours`, `gpsQuickProbeMs`, `gpsStaleRetryMs`,
-`gpsColdHuntMs`, `useDefaultLocation`, `defaultLat`, `defaultLon`, `gpsBaud`.
+`useLocationCache`, `gpsQuickProbeMs` (default 1200 ms), `useDefaultLocation`,
+`defaultLat`, `defaultLon`, `gpsBaud`.
+
+`gpsQuickProbeMs` is the only location wait a lookup will ever do. The GPS
+receiver keeps running before, during and after cycles, so a cold start resolves
+in the background and later presses use the fresh fix automatically.
 
 ### Network
 `wifiSsid`, `wifiPassword` (write-only), `apiEndpoint`, `tlsInsecure`,
@@ -443,7 +475,17 @@ colour order, `CONFIG_HOLD_MS`, `DEV_PIN`.
    the idle timeout (5 min default).
 10. Press the button repeatedly: each cycle should start quickly because Wi-Fi
     stays connected and the GPS parser keeps running while idle.
-11. Run a normal cycle and check the serial log for `largest internal block`
+11. **Fast-lookup check:** with no fresh fix (e.g. just after a power cycle with
+    an empty cache), press the button. The lookup must proceed after at most
+    ~1.2 s using the cached location or the Ljubljana fallback; it must not sit
+    in a 60-second hunt. The serial log should show `no fresh fix after 1200 ms;
+    using … now`. Wait a minute and press again: the warm GPS should now be used
+    (`fresh fix in … ms`).
+12. **Colour preview check:** in Developer → LED ring, change a colour's R/G/B/A
+    fields. The first five LEDs should update within a fraction of a second with
+    the unsaved colours (A visibly dims them). Tapping Exit setup or applying
+    changes should return the ring to the ambient preview.
+13. Run a normal cycle and check the serial log for `largest internal block`
     before the HTTPS request; it should be comfortably above 45 KB. If not,
     reduce the app/partition size or trim NimBLE.
 

@@ -8,7 +8,9 @@ Ta skripta simulira STREŽNIK: surove točke uporabnikov obstajajo samo v
 pomnilniku, v bazo se zapišejo izključno agregati s pragom k. Plošča (app.py) bere samo
 zrak.db in nikoli ne vidi posameznih točk.
 """
+import os
 import sqlite3
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +21,8 @@ from sim import users, posnetek, DATUM, N, DELEZ_DELOVNIH
 from agregacija import agregiraj, K, RES
 from ocena import pripravi, najdi
 
-DB = "zrak.db"
+# Same database as app.py and the API bridge (arsodata/zrak_baza.py).
+DB = os.environ.get("ZRAK_DB") or str(Path(__file__).with_name("zrak.db"))
 SHEMA = Path(__file__).with_name("shema.sql")
 
 
@@ -159,6 +162,9 @@ def main():
         ("vir_uporabnikov", "sinteticno"),
         ("gral_vir", "ARSO GRAL, kurišča, PM10, 2021, kurilna sezona (model)"),
         ("n_uporabnikov", str(N)), ("delez_delovnih", str(DELEZ_DELOVNIH)),
+        # New id on every rebuild: the API bridge (arsodata/zrak_baza.py) uses it
+        # to discard private request counters that belonged to the old DB.
+        ("zagon_id", uuid.uuid4().hex),
     ])
     con.commit()
 

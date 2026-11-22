@@ -35,6 +35,7 @@ const state = {
   devAuthed: false,
   schema: null,
   devCfg: null,
+  previewWarned: false,
 };
 
 // Requests are serialised: one in flight at a time. The device processes them
@@ -49,9 +50,28 @@ function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
 }
 
+function parseRgba(value) {
+  const s = String(value || '').trim();
+  const m = /^#?([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(s);
+  if (!m) return { r: 0, g: 0, b: 0, a: 255 };
+  return {
+    r: parseInt(m[1].slice(0, 2), 16),
+    g: parseInt(m[1].slice(2, 4), 16),
+    b: parseInt(m[1].slice(4, 6), 16),
+    a: m[2] ? parseInt(m[2], 16) : 255,
+  };
+}
+
+function byteHex(n) {
+  return clamp(Math.round(Number(n) || 0), 0, 255).toString(16).padStart(2, '0');
+}
+
+function composeRgba(c) {
+  return `#${byteHex(c.r)}${byteHex(c.g)}${byteHex(c.b)}${byteHex(c.a)}`.toLowerCase();
+}
+
 function normalizeColor(v) {
-  const s = String(v || '').trim();
-  return /^#[0-9a-f]{6}$/i.test(s) ? s.toLowerCase() : '#000000';
+  return composeRgba(parseRgba(v));
 }
 
 function setStatus(el, message, kind = '') {
@@ -383,6 +403,9 @@ function setConnectionUI() {
 }
 
 function showTab(name) {
+  if (name !== 'dev' && $('devTab') && !$('devTab').hidden) {
+    clearColorPreview();
+  }
   document.querySelectorAll('.tab').forEach((button) => {
     button.classList.toggle('active', button.dataset.tab === name);
   });
@@ -514,6 +537,7 @@ function lockDev(message = '') {
   state.devAuthed = false;
   state.schema = null;
   state.devCfg = null;
+  state.previewWarned = false;
   const lock = $('devLock');
   const panel = $('devPanel');
   const form = $('devForm');
@@ -538,6 +562,7 @@ async function unlock() {
     const response = await request('auth', { pin }, 10000);
     if (response.ok) {
       state.devAuthed = true;
+      state.previewWarned = false;
       $('pinInput').value = '';
       $('devLock').hidden = true;
       $('devPanel').hidden = false;
@@ -598,6 +623,127 @@ function badge(text, extraClass = '') {
   return span;
 }
 
+let colorPreviewTimer = null;
+
+// Explicit R/G/B/A controls. A scales the colour's intensity on the LEDs; it is
+// not true transparency. Every change also streams a live preview to the ring.
+function buildRgbaEditor(key, value) {
+  const rgba = parseRgba(value);
+  const editor = document.createElement('div');
+  editor.className = 'rgbaEditor';
+  editor.dataset.type = 'color';
+
+  const swatch = document.createElement('span');
+  swatch.className = 'swatch';
+  swatch.setAttribute('aria-hidden', 'true');
+  editor.appendChild(swatch);
+
+  const channels = {};
+  for (const channel of ['r', 'g', 'b', 'a']) {
+    const wrap = document.createElement('label');
+    wrap.className = 'chan';
+    const cap = document.createElement('span');
+    cap.textContent = channel.toUpperCase();
+    const num = document.createElement('input');
+    num.type = 'number';
+    num.min = '0';
+    num.max = '255';
+    num.step = '1';
+    num.inputMode = 'numeric';
+    num.value = String(rgba[channel]);
+    num.dataset.channel = channel;
+    num.setAttribute('aria-label', `${channel.toUpperCase()} channel for ${key}`);
+    num.addEventListener('input', () => {
+      update();
+      scheduleColorPreview();
+    });
+    wrap.appendChild(cap);
+    wrap.appendChild(num);
+    channels[channel] = num;
+    editor.appendChild(wrap);
+  }
+
+  const hex = document.createElement('span');
+  hex.className = 'hex';
+  editor.appendChild(hex);
+
+  function read() {
+    return {
+      r: clamp(Math.round(Number(channels.r.value) || 0), 0, 255),
+      g: clamp(Math.round(Number(channels.g.value) || 0), 0, 255),
+      b: clamp(Math.round(Number(channels.b.value) || 0), 0, 255),
+      a: clamp(Math.round(Number(channels.a.value) || 0), 0, 255),
+    };
+  }
+
+  function update() {
+    const c = read();
+    const alpha = c.a / 255;
+    swatch.style.background =
+      `rgb(${Math.round(c.r * alpha)}, ${Math.round(c.g * alpha)}, ${Math.round(c.b * alpha)})`;
+    hex.textContent = composeRgba(c);
+  }
+
+  editor._readRgba = read;
+  update();
+  return editor;
+}
+
+function colorEditorsInOrder() {
+  if (!state.schema) return [];
+  return state.schema.fields
+    .filter((f) => f.type === 'color')
+    .map((f) => document.getElementById(`f_${f.key}`))
+    .filter((el) => el && typeof el._readRgba === 'function');
+}
+
+function supportsColorPreview() {
+  return Array.isArray(state.info?.ops) && state.info.ops.includes('previewColors');
+}
+
+function scheduleColorPreview() {
+  if (!state.connected || !state.devAuthed) return;
+  if (!supportsColorPreview()) {
+    if (!state.previewWarned) {
+      state.previewWarned = true;
+      setStatus(
+        $('devStatus'),
+        'Live preview needs the latest ring firmware (it did not advertise previewColors). Reflash and reconnect.',
+        'err',
+      );
+    }
+    return;
+  }
+  clearTimeout(colorPreviewTimer);
+  colorPreviewTimer = setTimeout(sendColorPreview, 120);
+}
+
+async function sendColorPreview() {
+  if (!state.connected || !state.devAuthed) return;
+  if (!supportsColorPreview()) {
+    scheduleColorPreview();   // shows the one-time warning
+    return;
+  }
+  const editors = colorEditorsInOrder().slice(0, 5);
+  if (!editors.length) return;
+  const colors = editors.map((el) => composeRgba(el._readRgba()));
+  try {
+    const response = await request('previewColors', { colors }, 8000);
+    if (!response.ok) {
+      setStatus($('devStatus'), `Colour preview failed: ${response.error || 'unknown error'}`, 'err');
+    }
+  } catch (err) {
+    setStatus($('devStatus'), `Colour preview failed: ${err.message || err}`, 'err');
+  }
+}
+
+function clearColorPreview() {
+  clearTimeout(colorPreviewTimer);
+  if (state.connected && state.devAuthed) {
+    request('clearPreview', {}, 5000).catch(() => {});
+  }
+}
+
 function makeField(field) {
   const row = document.createElement('div');
   row.className = 'field';
@@ -638,9 +784,7 @@ function makeField(field) {
       break;
 
     case 'color':
-      input = document.createElement('input');
-      input.type = 'color';
-      input.value = normalizeColor(current);
+      input = buildRgbaEditor(field.key, current);
       break;
 
     case 'string':
@@ -673,6 +817,9 @@ function makeField(field) {
   if (field.type === 'string' && field.maxLength) {
     help.textContent += ` Max ${field.maxLength} characters.`;
   }
+  if (field.type === 'color') {
+    help.textContent += ' R/G/B/A are 0–255; A scales the colour intensity.';
+  }
   if (field.secret) {
     help.textContent += ' Stored on the ring but never sent back; leave blank to keep the current value.';
   }
@@ -688,17 +835,11 @@ function makeField(field) {
     return row;
   }
 
+  if (field.type === 'color') row.classList.add('colorField');
+
   const control = document.createElement('div');
   control.className = 'fieldControl';
   control.appendChild(input);
-
-  if (field.type === 'color') {
-    const hex = document.createElement('span');
-    hex.className = 'hex';
-    hex.textContent = input.value;
-    input.addEventListener('input', () => { hex.textContent = input.value; });
-    control.appendChild(hex);
-  }
 
   row.appendChild(label);
   row.appendChild(control);
@@ -723,9 +864,35 @@ function renderDev() {
     const legend = document.createElement('legend');
     legend.textContent = groupName;
     group.appendChild(legend);
+
+    if (fields.some((f) => f.type === 'color')) {
+      const row = document.createElement('div');
+      row.className = 'previewRow';
+
+      const note = document.createElement('p');
+      note.className = 'help';
+      note.textContent = supportsColorPreview()
+        ? 'Edit colours with the R/G/B/A fields. Changes preview live on the first five LEDs; A scales intensity.'
+        : 'Live preview needs the latest ring firmware (previewColors was not advertised). Reflash and reconnect.';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ghost smallBtn';
+      button.textContent = 'Preview colours';
+      button.disabled = !supportsColorPreview();
+      button.addEventListener('click', () => sendColorPreview());
+
+      row.appendChild(note);
+      row.appendChild(button);
+      group.appendChild(row);
+    }
+
     for (const field of fields) group.appendChild(makeField(field));
     form.appendChild(group);
   }
+
+  // A form rebuild invalidates any live colour preview that was in progress.
+  clearColorPreview();
 }
 
 function collectDevChanges() {
@@ -750,7 +917,9 @@ function collectDevChanges() {
     }
 
     if (field.type === 'color') {
-      const next = normalizeColor(input.value);
+      const next = (input && typeof input._readRgba === 'function')
+        ? composeRgba(input._readRgba())
+        : normalizeColor(current);
       if (next !== normalizeColor(current)) values[field.key] = next;
       continue;
     }

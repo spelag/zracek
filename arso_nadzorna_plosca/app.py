@@ -12,6 +12,7 @@ OPOZORILO: uporabniki so SINTETIČNI, PM je MODEL (CAMx), ocena je OCENA.
 import os
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -22,7 +23,8 @@ from ocena import ocena
 
 st.set_page_config(page_title="Zrak, ki ga dihamo · ARSO", layout="wide")
 
-DB = "zrak.db"
+# Same database as baza.py and the API bridge (arsodata/zrak_baza.py).
+DB = os.environ.get("ZRAK_DB") or str(Path(__file__).with_name("zrak.db"))
 VIR_TXT = {"sinteticno": "sintetični", "dejansko": "dejanski"}
 CLENI = {
     "ocena": "Skupna ocena",
@@ -42,7 +44,8 @@ MTIME = os.path.getmtime(DB)      # ob ponovni gradnji baze se predpomnilnik osv
 
 # ------------------------------------------------------------------ branje iz baze
 def _q(sql, params=()):
-    with closing(sqlite3.connect(f"file:{DB}?mode=ro", uri=True)) as con:   # samo branje
+    uri = f"file:{Path(DB).as_posix()}?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True)) as con:   # samo branje
         return pd.read_sql(sql, con, params=params)
 
 
@@ -53,8 +56,11 @@ def celice_ob_uri(ura_utc, mtime):
 
 @st.cache_data
 def povzetek_ob_uri(ura_utc, mtime):
-    return _q("SELECT * FROM zasedenost_povzetek WHERE substr(ura_utc, 12, 2) = ?",
-              (f"{ura_utc:02d}",)).iloc[0]
+    d = _q("SELECT * FROM zasedenost_povzetek WHERE substr(ura_utc, 12, 2) = ?",
+           (f"{ura_utc:02d}",))
+    if d.empty:          # ura še brez objavljenih celic (npr. sveža baza)
+        return pd.Series({"objavljenih": 0, "izpuscenih": 0})
+    return d.iloc[0]
 
 
 @st.cache_data
@@ -141,8 +147,11 @@ top = razprseni_top(df)
 
 # ------------------------------------------------------------------ glava
 st.title("Zrak, ki ga dihamo: kje postaviti novo merilno mesto")
+_viri = sorted(df.vir.dropna().unique())
+_vir_txt = ("mešani (sintetični + dejanski)" if len(_viri) > 1
+            else VIR_TXT.get(_viri[0], _viri[0]) if _viri else "neznani")
 st.caption("ARSO ne vidi ljudi, vidi, kje je zrak slab in kje ga največ ljudi diha. "
-           f"Podatki o uporabnikih so **{VIR_TXT.get(df.vir.iloc[0], df.vir.iloc[0])}**, PM2.5 je **model (CAMx), ne meritev**, "
+           f"Podatki o uporabnikih so **{_vir_txt}**, PM2.5 je **model (CAMx), ne meritev**, "
            "ocena je **ocena**, ne meritev. Plošča bere samo agregirano bazo, brez posameznih lokacij.")
 
 c1, c2, c3, c4 = st.columns(4)

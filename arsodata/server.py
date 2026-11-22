@@ -5,12 +5,24 @@ array of air-quality classes 1..5 (1=good … 5=very bad), one per hour.
 
 Setup
 -----
-    pip install flask pandas numpy requests
+    pip install flask pandas numpy requests h3
 
 Run
 ---
-    python air_api.py                                  # http://127.0.0.1:9161
-    # production: gunicorn -w 1 -b 0.0.0.0:5000 air_api:app
+    python server.py                                   # http://127.0.0.1:9161
+    # production: gunicorn -w 1 -b 0.0.0.0:5000 server:app
+
+Dashboard database
+------------------
+Every valid request to /air-quality is also aggregated into the ARSO dashboard
+database (``arso_nadzorna_plosca/zrak.db``) by ``zrak_baza.zabelezi_zahtevo``:
+the snapped lat/lon becomes an H3 cell and its occupancy for the current UTC
+hour is incremented and committed.  Raw coordinates are never stored.
+
+``ZRAK_DB`` selects the dashboard DB (default: ../arso_nadzorna_plosca/zrak.db)
+and ``ZRAK_STAGING_DB`` the private sub-threshold counter DB (default:
+zrak_zahteve.db next to it).  Recording is best-effort: if the DB is missing,
+locked or h3 is not installed, the forecast is still answered normally.
 
 Endpoints
 ---------
@@ -86,9 +98,15 @@ except ImportError as _e:  # pragma: no cover
     sys.stderr.write(
         f"ERROR: could not import air_12 / pandas / flask: {_e}\n"
         "Place this file next to air_12.py and paket.py (and optionally v_zivo/).\n"
-        "Install: pip install flask pandas numpy requests\n"
+        "Install: pip install flask pandas numpy requests h3\n"
     )
     raise
+
+try:
+    from zrak_baza import zabelezi_zahtevo
+except Exception as _e:  # pragma: no cover - recording must never break the API
+    zabelezi_zahtevo = None
+    sys.stderr.write(f"WARNING: dashboard bridge unavailable ({_e}); requests will not be stored.\n")
 
 app = Flask(__name__)
 
@@ -139,6 +157,16 @@ def air_quality():
     if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
         return jsonify(error="lat must be in [-90, 90] and lon in [-180, 180].",
                        code="bad_request"), 400
+
+    # ---- dashboard: commit this request as aggregated occupancy --------
+    # Best-effort: a database problem must not break the forecast.
+    if zabelezi_zahtevo is not None:
+        try:
+            zapis = zabelezi_zahtevo(lat, lon)
+            if zapis:
+                app.logger.debug("recorded request in zrak.db: %s", zapis)
+        except Exception:  # noqa: BLE001
+            app.logger.exception("could not record air-data request in zrak.db")
 
     # ---- time / live ----------------------------------------------------
     at = request.args.get("at")            # None -> "now"
