@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Air</string>
+    <string name="complication_label">RGB Color Complication</string>
+    <string name="watch_face_name">Air RGB</string>
+    <string name="watch_face_description">Analog clock with a remote-driven RGB border</string>
+    <string name="complication_slot_name">RGB Border</string>
+</resources>

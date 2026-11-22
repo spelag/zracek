@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Watch Face Format definition for the Air RGB analog watch face.
+
+  The outer border is drawn twice:
+    1. A static fallback ring so the face always looks complete.
+    2. A ComplicationSlot (PHOTO_IMAGE) that renders a 12-segment wheel image supplied by
+       ColorComplicationDataSourceService from the remote API. Each segment covers exactly
+       one twelfth of the ring. When the user binds that complication, the dynamic wheel
+       covers the fallback.
+-->
+<WatchFace width="450" height="450" clipShape="CIRCLE">
+
+    <Metadata key="CLOCK_TYPE" value="ANALOG" />
+    <Metadata key="PREVIEW_TIME" value="10:09:00" />
+
+    <Scene backgroundColor="#FF000000">
+
+        <!-- Static border fallback (replaced visually by the complication ring when bound). -->
+<!--        <PartDraw x="0" y="0" width="450" height="450">-->
+<!--            <Ellipse x="4" y="4" width="442" height="442">-->
+<!--                <Stroke color="#FF4285F4" thickness="8" />-->
+<!--            </Ellipse>-->
+<!--        </PartDraw>-->
+
+        <!-- 12-segment color wheel bound to the remote color complication. -->
+        <ComplicationSlot
+            slotId="1"
+            displayName="@string/complication_slot_name"
+            supportedTypes="PHOTO_IMAGE EMPTY"
+            x="0" y="0" width="450" height="450">
+
+            <!-- Ring-shaped tap target: only the border is tappable, not the whole face. -->
+            <BoundingArc
+                centerX="225"
+                centerY="225"
+                width="442"
+                height="442"
+                thickness="20"
+                startAngle="0"
+                endAngle="359.999"
+                direction="CLOCKWISE" />
+
+            <Complication type="PHOTO_IMAGE">
+                <!-- The provider pre-renders the 12 segments (Wear OS complication color lists
+                     are limited to 7 colors, too few for 12 segments). -->
+                <PartImage x="0" y="0" width="450" height="450">
+                    <Image resource="[COMPLICATION.PHOTO_IMAGE]" />
+                </PartImage>
+            </Complication>
+
+            <!-- Lets the slot exist unbound, so no default provider policy is required. -->
+<!--            <Complication type="EMPTY" />-->
+        </ComplicationSlot>
+
+        <!-- Analog clock hands. -->
+        <AnalogClock x="0" y="0" width="450" height="450">
+            <HourHand
+                resource="@drawable/hour_hand"
+                x="213" y="105" width="24" height="120"
+                pivotX="0.5" pivotY="1.0" />
+            <MinuteHand
+                resource="@drawable/minute_hand"
+                x="216" y="55" width="18" height="170"
+                pivotX="0.5" pivotY="1.0" />
+            <SecondHand
+                resource="@drawable/second_hand"
+                x="223" y="40" width="4" height="185"
+                pivotX="0.5" pivotY="1.0">
+                <!-- Hide the second hand in ambient mode to save power. -->
+                <Variant mode="AMBIENT" target="alpha" value="0" />
+            </SecondHand>
+        </AnalogClock>
+
+        <!-- Center cap above the hands. -->
+        <PartDraw x="217" y="217" width="16" height="16">
+            <Ellipse x="0" y="0" width="16" height="16">
+                <Fill color="#FFFFFFFF" />
+<!--                <Fill color="#00000000" />-->
+            </Ellipse>
+        </PartDraw>
+
+    </Scene>
+</WatchFace>
